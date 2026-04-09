@@ -1,0 +1,95 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# LAB NOTES: UNIVERSAL CONSTANTS & COORDINATE SYSTEM
+# We’re operating in "God Units": Distance in AU, Time in Years.
+# In this realm, GM = 4 * pi^2. It's the ultimate numerical cheat code.
+# ==============================================================================
+GM = 4 * np.pi**2 
+
+def initiate_orbital_simulation(v0_val, tau_val, n_steps=200000):
+    """
+    The Core Numerical Engine.
+    Look Back details: Uses the Euler-Cromer (Symplectic) method
+    to ensure we don't violate the laws of physics like a total noob.
+    """
+    # PRE-ALLOCATING ARRAYS: We don't use lists here; that's for amateurs.
+    # We need raw speed for these 200k+ step runs.
+    r = np.zeros((n_steps, 2))      # Position [x, y]
+    v = np.zeros((n_steps, 2))      # Velocity [vx, vy]
+    energy = np.zeros(n_steps)      # Energy Monitor
+    t = np.zeros(n_steps)           # Time Axis
+
+    # INITIAL STATE: Starting at aphelion (35 AU) for maximum stiffness testing.
+    r[0] = np.array([35.0, 0.0])
+    v[0] = np.array([0.0, v0_val])
+    
+    # BASELINE ENERGY: Calculating the starting point so we can measure the 'leak'.
+    r_mag_init = np.linalg.norm(r[0])
+    v_sq_init = np.sum(v[0]**2)
+    energy[0] = 0.5 * v_sq_init - GM / r_mag_init
+
+    # THE PHYSICS LOOP
+    for i in range(n_steps - 1):
+        # 1. ANALYZE LOCAL GRAVITY
+        # a = -GM * r / r^3
+        r_mag = np.linalg.norm(r[i])
+        accel = -GM * r[i] / r_mag**3
+
+        # 2. THE EULER-CROMER CHEAT CODE (The 'Gold Standard' for EC)
+        # We update velocity FIRST, then use that NEW velocity for position.
+        # This keeps our angular momentum from decaying into digital dust.
+        v[i+1] = v[i] + tau_val * accel
+        r[i+1] = r[i] + tau_val * v[i+1]
+        t[i+1] = t[i] + tau_val
+
+        # 3. MONITOR TOTAL ENERGY: If this line isn't flat, the physics is broken.
+        v_sq_new = np.sum(v[i+1]**2)
+        r_mag_new = np.linalg.norm(r[i+1])
+        energy[i+1] = 0.5 * v_sq_new - GM / r_mag_new
+
+    # CALCULATING NUMERICAL LEAKAGE (Drift %)
+    drift = abs((energy[-1] - energy[0]) / energy[0]) * 100
+    return r, energy, t, drift
+
+# ==============================================================================
+# EXPERIMENTAL EXECUTION: HALLEY'S COMET (v0 = 0.198 AU/yr)
+# Using our Log-Log Extrapolated Tau (0.005 yr) for maximum precision.
+# ==============================================================================
+v_halley = 0.198
+tau_halley = 0.005 
+
+# Fire the engines for a massive 500-year simulation
+r_data, e_data, t_data, drift_val = initiate_orbital_simulation(v_halley, tau_halley)
+
+# ==============================================================================
+# VISUALIZATION SUITE: GARCIA-STYLE POLAR + ENERGY MONITOR
+# ==============================================================================
+plt.style.use('dark_background')
+fig = plt.figure(figsize=(14, 6))
+
+# PLOT 1: THE POLAR TRAJECTORY (The 'Garcia' Vibe)
+r_polar = np.sqrt(r_data[:,0]**2 + r_data[:,1]**2)
+theta_polar = np.arctan2(r_data[:,1], r_data[:,0])
+
+ax1 = fig.add_subplot(1, 2, 1, projection='polar')
+ax1.plot(theta_polar, r_polar, color='magenta', linewidth=1, label='Halley Orbit')
+ax1.plot(0, 0, 'yo', markersize=12, label='Sun')
+ax1.set_title("Polar Trajectory: Halley's Comet Geometry", color='cyan')
+ax1.grid(True, alpha=0.3)
+ax1.legend()
+
+# PLOT 2: ENERGY STABILITY MONITOR
+ax2 = fig.add_subplot(1, 2, 2)
+ax2.plot(t_data, e_data, color='lime', label=f'Drift: {drift_val:.5f}%')
+ax2.set_title("Energy Stability (Total Conservation)", color='cyan')
+ax2.set_xlabel("Time (Years)")
+ax2.set_ylabel("Specific Energy")
+ax2.grid(True, alpha=0.2)
+ax2.legend()
+
+plt.tight_layout()
+plt.show()
+
+print(f"PROJECT REPORT VERDICT: Final Energy Drift = {drift_val:.6f}%")
