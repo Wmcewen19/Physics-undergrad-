@@ -1,3 +1,8 @@
+
+# ==============================================================================
+# EXERCISE 3.06: Halley's Comet Euler-Cromer 
+# ==============================================================================
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -93,3 +98,558 @@ plt.tight_layout()
 plt.show()
 
 print(f"PROJECT REPORT VERDICT: Final Energy Drift = {drift_val:.6f}%")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ==============================================================================
+# EXERCISE 3.11: THE 4TH-ORDER RUNGE-KUTTA (RK4) UPGRADE
+# ==============================================================================
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# Lab Notes: THE RK4 PRECISION ENGINE
+# ------------------------------------------------------------------------------
+# OBJECTIVE: Upgrade the Halley's Comet simulation from Euler-Cromer to 
+# 4th-Order Runge-Kutta. I want to see if this 'scouting' method can handle 
+# the high-speed slingshot at perihelion better than my previous setup.
+#
+# UNITS: Distance = AU | Time = Years | GM = 4*pi^2 (Solar mass units)
+# ==============================================================================
+GM = 4 * np.pi**2 
+
+def get_derivs(state):
+    """
+    THE PHYSICS KERNEL: This is the brain of the gravity simulator.
+    It takes my current state [x, y, vx, vy] and spits out the 
+    derivatives [vx, vy, ax, ay]. 
+    
+    FUTURE NOTE: If I ever want to simulate a different planet or 
+    even a black hole, I just need to swap out the acceleration (ax, ay) 
+    math right here.
+    """
+    x, y, vx, vy = state
+    r_mag = np.sqrt(x**2 + y**2) # Distance from the Sun
+    
+    # Standard Inverse-Square Law: a = -GM/r^2 (broken into components)
+    ax = -GM * x / r_mag**3
+    ay = -GM * y / r_mag**3
+    
+    return np.array([vx, vy, ax, ay])
+
+def rk4_step(state, tau):
+    """
+    THE 'FOUR SCOUTS' METHOD: This is what makes RK4 the gold standard.
+    Instead of just guessing where the comet goes next, I send out 4 'scouts' 
+    at different points along the curve to see how the gravity energy changes.
+    
+    k1 = Start of the step
+    k2 & k3 = Midpoints (these get double weight because they are usually most accurate)
+    k4 = End of the step
+    """
+    k1 = tau * get_derivs(state)
+    k2 = tau * get_derivs(state + 0.5 * k1)
+    k3 = tau * get_derivs(state + 0.5 * k2)
+    k4 = tau * get_derivs(state + k3)
+    
+    # We combine them with a weighted average to get the final surgical precision.
+    return state + (k1 + 2*k2 + 2*k3 + k4) / 6.0
+
+def run_rk4_sim(v0, tau, total_years=500):
+    """
+    THE SIMULATION LOOP: Runs the orbit for several centuries to check for drift.
+    """
+    n_steps = int(total_years / tau)
+    # Starting at Aphelion (35 AU away, moving at its slowest)
+    state = np.array([35.0, 0.0, 0.0, v0]) 
+    
+    pos_history = np.zeros((n_steps, 2))
+    energy_history = np.zeros(n_steps)
+    
+    # Grab initial energy for the final drift calculation
+    e_init = 0.5 * (state[2]**2 + state[3]**2) - GM / 35.0
+
+    for i in range(n_steps):
+        pos_history[i] = state[:2]
+        r_mag = np.sqrt(state[0]**2 + state[1]**2)
+        # Record the total energy (Kinetic + Potential) to see if the math 'leaks'
+        energy_history[i] = 0.5 * (state[2]**2 + state[3]**2) - GM / r_mag
+        
+        # Take the surgical RK4 jump
+        state = rk4_step(state, tau)
+        
+    drift = abs((energy_history[-1] - e_init) / e_init) * 100
+    return pos_history, energy_history, drift
+
+# ==============================================================================
+# EXPERIMENT EXECUTION
+# ------------------------------------------------------------------------------
+# Using tau = 0.005. I'm keeping this the same as my 3.6 run so I can 
+# compare the precision of RK4 vs Euler-Cromer fairly.
+# ==============================================================================
+v0_h = 0.198 # Halley's velocity at aphelion
+tau_h = 0.005 
+
+pos, energy, drift_val = run_rk4_sim(v0_h, tau_h)
+
+# ==============================================================================
+# VISUALIZATION: THE POLAR MASTERPIECE
+# ------------------------------------------------------------------------------
+# I'm using a Polar projection because it makes the orbital geometry 
+# much easier to visualize than standard X/Y plots.
+# ==============================================================================
+plt.style.use('dark_background')
+fig = plt.figure(figsize=(12, 6))
+
+# Convert the Cartesian results to Polar (Radius and Angle)
+r_vals = np.sqrt(pos[:,0]**2 + pos[:,1]**2)
+theta_vals = np.arctan2(pos[:,1], pos[:,0])
+
+# Plot 1: Polar Orbital Path
+ax1 = fig.add_subplot(1, 2, 1, projection='polar')
+ax1.plot(theta_vals, r_vals, color='magenta', linewidth=1, label='RK4 Trajectory')
+ax1.plot(0, 0, 'yo', markersize=10, label='Sun') # The Sun at the center (origin)
+ax1.set_title("Polar Orbital Geometry", color='cyan', fontsize=14)
+ax1.grid(True, alpha=0.3)
+
+# Plot 2: Energy Monitor
+# If this is a flat line, I've successfully 'tricked' the machine into 
+# respecting the laws of physics.
+ax2 = fig.add_subplot(1, 2, 2)
+time_axis = np.linspace(0, 500, len(energy))
+ax2.plot(time_axis, energy, color='lime')
+ax2.set_title(f"RK4 Energy Stability (Drift: {drift_val:.2e}%)", color='cyan', fontsize=14)
+ax2.set_xlabel("Years", fontsize=12)
+ax2.set_ylabel("Total Energy", fontsize=12)
+
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ==============================================================================
+# EXERCISE 3.11: THE 4TH-ORDER RUNGE-KUTTA (RK4-EC) Comparison
+# ==============================================================================
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MAD SCIENTIST LAB: THE RK4 REDEMPTION (3.11)
+# Goal: Compare RK4 vs Euler-Cromer at a "Fair" resolution.
+# Units: Distance=AU, Time=Years. GM = 4*pi^2.
+# ==============================================================================
+GM = 4 * np.pi**2 
+
+def get_derivs(state):
+    """The Physics Core: [x, y, vx, vy] -> [vx, vy, ax, ay]"""
+    x, y, vx, vy = state
+    r_mag = np.sqrt(x**2 + y**2)
+    ax, ay = -GM * x / r_mag**3, -GM * y / r_mag**3
+    return np.array([vx, vy, ax, ay])
+
+def rk4_step(state, tau):
+    """The Surgical 4th-Order Scout Method."""
+    k1 = tau * get_derivs(state)
+    k2 = tau * get_derivs(state + 0.5 * k1)
+    k3 = tau * get_derivs(state + 0.5 * k2)
+    k4 = tau * get_derivs(state + k3)
+    return state + (k1 + 2*k2 + 2*k3 + k4) / 6.0
+
+def ec_step(state, tau):
+    """The Stable 1st-Order Symplectic Method."""
+    x, y, vx, vy = state
+    r_mag = np.sqrt(x**2 + y**2)
+    # Velocity FIRST, then position
+    vx_new = vx + tau * (-GM * x / r_mag**3)
+    vy_new = vy + tau * (-GM * y / r_mag**3)
+    x_new = x + tau * vx_new
+    y_new = y + tau * vy_new
+    return np.array([x_new, y_new, vx_new, vy_new])
+
+def run_experiment(method, tau_val, total_years=500):
+    n_steps = int(total_years / tau_val)
+    state = np.array([35.0, 0.0, 0.0, 0.198]) # Halley Aphelion
+    
+    pos_history = np.zeros((n_steps, 2))
+    energy_history = np.zeros(n_steps)
+    e_init = 0.5 * (0.198**2) - GM / 35.0
+
+    for i in range(n_steps):
+        pos_history[i] = state[:2]
+        r_mag = np.sqrt(state[0]**2 + state[1]**2)
+        energy_history[i] = 0.5 * (state[2]**2 + state[3]**2) - GM / r_mag
+        
+        if method == 'RK4':
+            state = rk4_step(state, tau_val)
+        else:
+            state = ec_step(state, tau_val)
+            
+    drift = abs((energy_history[-1] - e_init) / e_init) * 100
+    return pos_history, energy_history, drift
+
+# ==============================================================================
+# EXECUTION: PROVING THE SUPERIORITY
+# We are using tau = 0.015. This is the "Sweet Spot."
+# ==============================================================================
+tau_fair = 0.005 
+
+rk4_pos, rk4_e, rk4_drift = run_experiment('RK4', tau_fair)
+ec_pos, ec_e, ec_drift = run_experiment('EC', tau_fair)
+
+# --- POLAR VISUALIZATION ---
+plt.style.use('dark_background')
+fig = plt.figure(figsize=(14, 7))
+
+def to_polar(pos_array):
+    r = np.sqrt(pos_array[:,0]**2 + pos_array[:,1]**2)
+    theta = np.arctan2(pos_array[:,1], pos_array[:,0])
+    return r, theta
+
+# RK4 Plot
+r_rk, t_rk = to_polar(rk4_pos)
+ax1 = fig.add_subplot(1, 2, 1, projection='polar')
+ax1.plot(t_rk, r_rk, color='magenta', label=f'RK4 Drift: {rk4_drift:.2e}%')
+ax1.plot(0, 0, 'yo', markersize=12)
+ax1.set_title("RK4: The Precision King", color='cyan')
+ax1.legend()
+
+# Euler-Cromer Plot
+r_ec, t_ec = to_polar(ec_pos)
+ax2 = fig.add_subplot(1, 2, 2, projection='polar')
+ax2.plot(t_ec, r_ec, color='cyan', label=f'EC Drift: {ec_drift:.2f}%')
+ax2.plot(0, 0, 'yo', markersize=12)
+ax2.set_title("Euler-Cromer: The Stable Workhorse", color='cyan')
+ax2.legend()
+
+plt.tight_layout()
+plt.show()
+
+print(f"RESULTS AT TAU {tau_fair}:")
+print(f"RK4 Drift: {rk4_drift:.10f}%")
+print(f"EC Drift:  {ec_drift:.10f}%")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ==============================================================================
+# EXERCISE 3.14: # PROBLEM 3.14 - ADAPTIVE ORBITAL PRECESSION (POLAR)
+# Force Law: F = -(GMm/r^3) * (1 - alpha/r) * r
+# ==============================================================================
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+GM = 4 * np.pi**2
+ALPHA = 0.01  # Constant for physical precession per class notes
+
+def get_accel(r_vec, alpha):
+    """The Non-Newtonian Gravity Kernel."""
+    r_mag = np.linalg.norm(r_vec)
+    # Applying the (1 - alpha/r) correction factor
+    return -GM * (1 - alpha / r_mag) / r_mag**3 * r_vec
+
+def rk4_step(r, v, tau, alpha):
+    """Standard 4th-Order jump for the adaptive comparison."""
+    def derivs(curr_r, curr_v):
+        return curr_v, get_accel(curr_r, alpha)
+
+    k1r, k1v = derivs(r, v)
+    k2r, k2v = derivs(r + 0.5*tau*k1r, v + 0.5*tau*k1v)
+    k3r, k3v = derivs(r + 0.5*tau*k2r, v + 0.5*tau*k2v)
+    k4r, k4v = derivs(r + tau*k3r, v + tau*k3v)
+
+    r_next = r + (tau/6.0) * (k1r + 2*k2r + 2*k3r + k4r)
+    v_next = v + (tau/6.0) * (k1v + 2*k2v + 2*k3v + k4v)
+    return r_next, v_next
+
+def adaptive_engine(r, v, tau, alpha, tol=1e-8):
+    """THE ADAPTIVE BRAIN: Efficiency is king here."""
+    r_big, v_big = rk4_step(r, v, tau, alpha)
+    r_mid, v_mid = rk4_step(r, v, tau/2.0, alpha)
+    r_small, v_small = rk4_step(r_mid, v_mid, tau/2.0, alpha)
+    
+    error = np.linalg.norm(r_big - r_small)
+    
+    if error < tol:
+        r_next, v_next = r_small, v_small
+        tau_next = tau * (tol / error)**0.2 if error > 0 else tau * 2.0
+        return r_next, v_next, tau_next, True
+    else:
+        tau_next = tau * (tol / error)**0.2
+        return r, v, tau_next, False
+
+# --- SIMULATION SETUP ---
+r = np.array([1.0, 0.0]) # Starting at Aphelion
+v = np.array([0.0, 4.0]) 
+tau, t, t_max = 0.01, 0, 50 # Reduced t_max for a cleaner flower plot
+history = []
+
+while t < t_max:
+    history.append(r.copy())
+    r, v, tau, accepted = adaptive_engine(r, v, tau, ALPHA)
+    if accepted:
+        t += tau
+
+history = np.array(history)
+
+# --- POLAR CONVERSION ---
+r_coords = np.sqrt(history[:,0]**2 + history[:,1]**2)
+theta_coords = np.arctan2(history[:,1], history[:,0])
+
+# --- PLOTTING ---
+plt.style.use('dark_background')
+fig = plt.figure(figsize=(10, 10))
+ax = fig.add_subplot(1, 1, 1, projection='polar')
+
+ax.plot(theta_coords, r_coords, color='cyan', linewidth=0.7, label='Precessing Path')
+ax.plot(0, 0, 'yo', markersize=15, label='Sun')
+
+# Theoretical Precession Calculation
+# Specific L = r x v (effectively r x p since m=1)
+L = np.linalg.norm(np.cross(np.append(history[0], 0), np.append([0, 4.0], 0)))
+a_theory = np.sqrt(1 + (GM * ALPHA) / L**2)
+precession_deg = abs(360 * (1 - a_theory) / a_theory)
+
+ax.set_title(f"3.14: Polar Precession (Flower Orbit)\nPredicted Precession: {precession_deg:.2f}° / rev", 
+             color='magenta', fontsize=14, pad=20)
+ax.legend(loc='upper right')
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ==============================================================================
+# PROBLEM 3.15 - THE SPIRAL OF DEATH (ADAPTIVE RK4 WITH DRAG)
+# Purpose: To demonstrate orbital decay and the paradox of increasing 
+# average kinetic energy in a dissipative central force system.
+# ==============================================================================
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+
+# --- Physical Constants (Gaussian Units) ---
+GM = 4 * np.pi**2  # Gravitational Parameter for Solar System (AU^3/yr^2)
+
+# --- Initial Conditions (Halley-like Ellipse) ---
+r = np.array([1.0, 0.0])   # Starting at 1 AU
+v = np.array([0.0, 4.0])   # Initial velocity (AU/yr) - Elliptical velocity
+r_mag0 = np.linalg.norm(r)
+v_mag0 = np.linalg.norm(v)
+
+# --- The Death Constant (C) ---
+# Prompt Requirement: Set C such that |Fg| = 100 * |Fd| at t=0
+# Calculation: (GM/r^2) = 100 * C * v^2
+C_DRAG = (GM / r_mag0**2) / (100 * v_mag0**2)
+
+def get_accel(r_vec, v_vec):
+    """
+    MODULAR PHYSICS KERNEL:
+    Calculates the combined acceleration of Gravity and Drag.
+    F_drag = -C * |v| * v (Velocity-squared drag law)
+    """
+    r_mag = np.linalg.norm(r_vec)
+    v_mag = np.linalg.norm(v_vec)
+    
+    # 1. Newtonian Gravity (Conservative)
+    a_grav = -GM / r_mag**3 * r_vec
+    
+    # 2. Atmospheric/Interplanetary Drag (Non-Conservative)
+    # This force always acts opposite to the velocity vector.
+    a_drag = -C_DRAG * v_mag * v_vec
+    
+    return a_grav + a_drag
+
+def rk4_step(r, v, tau):
+    """
+    4th-ORDER RUNGE-KUTTA INTEGRATOR:
+    Advances the state (r, v) by one time-step tau.
+    """
+    def derivs(curr_r, curr_v):
+        return curr_v, get_accel(curr_r, curr_v)
+        
+    k1r, k1v = derivs(r, v)
+    k2r, k2v = derivs(r + 0.5*tau*k1r, v + 0.5*tau*k1v)
+    k3r, k3v = derivs(r + 0.5*tau*k2r, v + 0.5*tau*k2v)
+    k4r, k4v = derivs(r + tau*k3r, v + tau*k3v)
+    
+    r_next = r + (tau/6.0) * (k1r + 2*k2r + 2*k3r + k4r)
+    v_next = v + (tau/6.0) * (k1v + 2*k2v + 2*k3v + k4v)
+    return r_next, v_next
+
+def adaptive_engine(r, v, tau, tol=1e-8):
+    """
+    THE ADAPTIVE BRAIN:
+    Compares 1 big step vs 2 half-steps to estimate local error.
+    Essential for 'stiff' problems where velocity changes rapidly.
+    """
+    # 1. Take one full step of size tau
+    r_big, v_big = rk4_step(r, v, tau)
+    
+    # 2. Take two half-steps of size tau/2
+    r_mid, v_mid = rk4_step(r, v, tau/2.0)
+    r_small, v_small = rk4_step(r_mid, v_mid, tau/2.0)
+    
+    # 3. Compute relative error (Richardson Extrapolation logic)
+    error = np.linalg.norm(r_big - r_small)
+    
+    if error < tol:
+        # Step accepted! Scale tau up for efficiency if error is low.
+        tau_next = tau * (tol / error)**0.2 if error > 0 else tau * 2.0
+        return r_small, v_small, tau_next, True
+    else:
+        # Step rejected. Shrink tau and retry the same point.
+        tau_next = tau * (tol / error)**0.2
+        return r, v, tau_next, False
+
+# --- SIMULATION LOOP ---
+tau, t, t_max = 0.01, 0, 15  # Starting tau, current time, max years
+history = []
+ke_history = []
+t_history = []
+
+while t < t_max:
+    # Record state for analysis
+    history.append(r.copy())
+    ke_history.append(0.5 * np.linalg.norm(v)**2) # Kinetic Energy (m=1)
+    t_history.append(t)
+    
+    # Call the adaptive engine to advance the state
+    r, v, tau, accepted = adaptive_engine(r, v, tau)
+    if accepted:
+        t += tau
+    
+    # CRASH CONDITION: Stopping the simulation if we impact the Sun's surface
+    if np.linalg.norm(r) < 0.02:
+        print(f"Impact! The comet has fallen after {t:.2f} years.")
+        break
+
+history = np.array(history)
+
+# --- PLOTTING & VISUALIZATION ---
+plt.style.use('dark_background')
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 7))
+
+# Plot 1: The Spiral Trajectory
+ax1.plot(history[:,0], history[:,1], color='orange', linewidth=0.7, label='Decaying Path')
+ax1.plot(0, 0, 'yo', markersize=15, label='Sun')
+ax1.set_xlabel("x-Coordinate (AU)", fontsize=12)
+ax1.set_ylabel("y-Coordinate (AU)", fontsize=12)
+ax1.set_title("3.15: The Orbital Spiral of Death", color='orange', fontsize=14)
+ax1.set_aspect('equal')
+ax1.legend()
+
+# Plot 2: Kinetic Energy Paradox
+ax2.plot(t_history, ke_history, color='lime', linewidth=1.2)
+ax2.set_xlabel("Time (Years)", fontsize=12)
+ax2.set_ylabel("Kinetic Energy (AU²/yr²)", fontsize=12)
+ax2.set_title("Paradox: Average Kinetic Energy vs. Time", color='lime', fontsize=14)
+ax2.grid(alpha=0.1)
+
+plt.tight_layout()
+plt.show()
