@@ -1,6 +1,6 @@
 
 # ==============================================================================
-# EXERCISE 3.06: Halley's Comet Euler-Cromer 
+# EXERCISE 1 problem 3.06: Halley's Comet Euler-Cromer 
 # ==============================================================================
 
 import numpy as np
@@ -128,7 +128,7 @@ print(f"PROJECT REPORT VERDICT: Final Energy Drift = {drift_val:.6f}%")
 
 
 # ==============================================================================
-# EXERCISE 3.11: THE 4TH-ORDER RUNGE-KUTTA (RK4) UPGRADE
+# EXERCISE 2 problem 3.11: THE 4TH-ORDER RUNGE-KUTTA (RK4) UPGRADE
 # ==============================================================================
 
 import numpy as np
@@ -281,13 +281,13 @@ plt.show()
 
 
 # ==============================================================================
-# EXERCISE 3.11: THE 4TH-ORDER RUNGE-KUTTA (RK4-EC) Comparison
+# EXERCISE 2.1 problem 3.11: THE 4TH-ORDER RUNGE-KUTTA (RK4-EC) Comparison
 # ==============================================================================
 import numpy as np
 import matplotlib.pyplot as plt
 
 # ==============================================================================
-# MAD SCIENTIST LAB: THE RK4 REDEMPTION (3.11)
+# Lab Notes: THE RK4 REDEMPTION (3.11)
 # Goal: Compare RK4 vs Euler-Cromer at a "Fair" resolution.
 # Units: Distance=AU, Time=Years. GM = 4*pi^2.
 # ==============================================================================
@@ -410,7 +410,7 @@ print(f"EC Drift:  {ec_drift:.10f}%")
 
 
 # ==============================================================================
-# EXERCISE 3.14: # PROBLEM 3.14 - ADAPTIVE ORBITAL PRECESSION (POLAR)
+# EXERCISE 3 problem 3.14: # PROBLEM 3.14 - ADAPTIVE ORBITAL PRECESSION (POLAR)
 # Force Law: F = -(GMm/r^3) * (1 - alpha/r) * r
 # ==============================================================================
 import numpy as np
@@ -523,7 +523,7 @@ plt.show()
 
 
 # ==============================================================================
-# PROBLEM 3.15 - THE SPIRAL OF DEATH (ADAPTIVE RK4 WITH DRAG)
+# EXERSIZE 4 problem 3.15 - THE SPIRAL OF DEATH (ADAPTIVE RK4 WITH DRAG)
 # Purpose: To demonstrate orbital decay and the paradox of increasing 
 # average kinetic energy in a dissipative central force system.
 # ==============================================================================
