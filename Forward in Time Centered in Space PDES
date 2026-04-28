@@ -1,0 +1,247 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MAD SCIENTIST LAB NOTES: PROJECT 4 - EXERCISE 6.3
+# ------------------------------------------------------------------------------
+# OBJECTIVE: Find the 'Numerical Breaking Point' of the 1D Diffusion Equation.
+# We center the rod at 0 so the boundaries sit at +/- 0.5.
+# ==============================================================================
+
+def run_trial(tau, N=61, kappa=1.0, L=1.0, nstep=300):
+    """The Core Marching Engine: Forward Time, Centered Space."""
+    h = L / (N - 1)
+    coeff = kappa * tau / h**2
+    
+    x_axis = np.linspace(-L/2, L/2, N) 
+    tt = np.zeros(N)
+    
+    # Delta spike at x=0 (Index 30 for N=61)
+    center_idx = int((N - 1) / 2)
+    tt[center_idx] = 1.0 / h 
+    
+    for _ in range(nstep):
+        # Update interior points; skip ends (Dirichlet B.C.s = 0)
+        tt[1:-1] = tt[1:-1] + coeff * (tt[2:] + tt[0:-2] - 2*tt[1:-1])
+        
+    return x_axis, tt, coeff
+
+def plot_individual(x, tt, tau, c, trial_num):
+    """Plotting logic for isolated trials."""
+    plt.style.use('dark_background')
+    plt.figure(figsize=(8, 5))
+    plt.plot(x, tt, color='cyan', label=f'Tau={tau}')
+    plt.title(f"Trial {trial_num}: Stability Check (Coeff={c:.3f})")
+    plt.xlabel("Position (x)")
+    plt.ylabel("Temperature (T)")
+    plt.grid(alpha=0.2)
+    plt.legend()
+    plt.show()
+
+# --- INDIVIDUAL EXECUTION BLOCKS ---
+
+# Trial 1: High Precision (Stable) [cite: 281]
+x1, res1, c1 = run_trial(1e-5)
+plot_individual(x1, res1, 1e-5, c1, 1)
+
+# Trial 2: Stable Spread [cite: 281]
+x2, res2, c2 = run_trial(5e-5)
+plot_individual(x2, res2, 5e-5, c2, 2)
+
+# Trial 3: Boundary Limit (Stable) [cite: 281]
+x3, res3, c3 = run_trial(1e-4)
+plot_individual(x3, res3, 1e-4, c3, 3)
+
+# Trial 4: The Breaking Point (Unstable)
+x4, res4, c4 = run_trial(5e-4)
+plot_individual(x4, res4, 5e-4, c4, 4)
+
+# Trial 5: Total Meltdown (Unstable)
+x5, res5, c5 = run_trial(1e-3)
+plot_individual(x5, res5, 1e-3, c5, 5)
+
+# --- MASTER OVERLAY SCRIPT ---
+tau_list = [1e-5, 5e-5, 1e-4, 5e-4, 1e-3]
+plt.figure(figsize=(12, 7))
+
+for i, t_val in enumerate(tau_list):
+    x_master, results_master, s_coeff = run_trial(t_val)
+    # Using r"..." to fix the LaTeX escape sequence warning
+    plt.plot(x_master, results_master, label=f"Trial {i+1}: $\\tau$={t_val} (C={s_coeff:.3f})")
+
+plt.title(r"Project 4 Master Sweep: $x \in [-0.5, 0.5]$ Stability Analysis", color='cyan')
+plt.xlabel("Position (x)")
+plt.ylabel("Temperature (T)")
+plt.axvline(0, color='white', linestyle='--', alpha=0.3) 
+plt.ylim(-5, 70) 
+plt.legend()
+plt.show()
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MAD SCIENTIST LAB NOTES: PROJECT 4 - EXERCISE 6.3 (PART 2)
+# ------------------------------------------------------------------------------
+# OBJECTIVE: Analyze how Grid Density (N) impacts numerical stability.
+# FIXED PARAMETER: Tau = 1.0e-4 (Solidly stable at N=61, but not at N=301).
+# PHYSICS: Center-spike IC on a rod spanning [-0.5, 0.5].
+# ==============================================================================
+
+def run_n_trial(N_val, tau_fixed=1e-4, kappa=1.0, L=1.0, nstep=300):
+    """The Core Marching Engine for the N-Sweep."""
+    h = L / (N_val - 1) # Grid spacing shrinks as N grows
+    coeff = kappa * tau_fixed / h**2 # C grows with N^2
+    
+    x_axis = np.linspace(-L/2, L/2, N_val) 
+    tt = np.zeros(N_val)
+    
+    # Delta spike at x=0
+    center_idx = int((N_val - 1) / 2)
+    tt[center_idx] = 1.0 / h 
+    
+    for _ in range(nstep):
+        # Dirichlet Boundaries: Fixed at 0
+        tt[1:-1] = tt[1:-1] + coeff * (tt[2:] + tt[0:-2] - 2*tt[1:-1])
+        
+    return x_axis, tt, coeff
+
+def plot_individual_n(x, tt, n_val, c, trial_num):
+    """Plotting logic for isolated N-sweeps."""
+    plt.style.use('dark_background')
+    plt.figure(figsize=(8, 5))
+    plt.plot(x, tt, color='magenta', label=f'N={n_val}')
+    plt.title(f"Trial {trial_num}: N Sweep Stability (Coeff={c:.3f})")
+    plt.xlabel("Position (x)")
+    plt.ylabel("Temperature (T)")
+    plt.grid(alpha=0.2)
+    plt.legend()
+    plt.show()
+
+# --- INDIVIDUAL EXECUTION BLOCKS (Varying N, Fixed Tau=1e-4) ---
+
+# Trial 1: Low Density (N=25)
+xn1, rn1, cn1 = run_n_trial(25)
+plot_individual_n(xn1, rn1, 25, cn1, 1) # Very stable (C=0.06)
+
+# Trial 2: Standard Density (N=51)
+xn2, rn2, cn2 = run_n_trial(51)
+plot_individual_n(xn2, rn2, 51, cn2, 2) # Stable (C=0.25)
+
+# Trial 3: Breaking Point Density (N=101)
+xn3, rn3, cn3 = run_n_trial(101)
+plot_individual_n(xn3, rn3, 101, cn3, 3) # UNSTABLE! (C=1.00)
+
+# Trial 4: High Density (N=201)
+xn4, rn4, cn4 = run_n_trial(201)
+plot_individual_n(xn4, rn4, 201, cn4, 4) # TOTAL NOISE (C=4.00)
+
+# Trial 5: Max Density (N=301)
+xn5, rn5, cn5 = run_n_trial(301)
+plot_individual_n(xn5, rn5, 301, cn5, 5) # MELTDOWN (C=9.00)
+
+# --- MASTER N-SWEEP OVERLAY SCRIPT ---
+N_list = [25, 51, 101, 201, 301]
+tau_fixed = 1e-4
+plt.figure(figsize=(12, 7))
+
+for i, n_val in enumerate(N_list):
+    x_m, res_m, s_c = run_n_trial(n_val, tau_fixed)
+    plt.plot(x_m, res_m, label=f"Trial {i+1}: N={n_val} (C={s_c:.3f})")
+
+plt.title(r"Project 4 Domain Sweep: $x \in [-0.5, 0.5]$ @ $\tau=1.0 \times 10^{-4}$", color='magenta')
+plt.xlabel("Position (x)")
+plt.ylabel("Temperature (T)")
+plt.axvline(0, color='white', linestyle='--', alpha=0.3) 
+plt.ylim(-10, 150) # Catching those high spikes
+plt.legend()
+plt.show()
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# PROJECT NOTES: PROJECT 4 - EXERCISE 6.6
+# ------------------------------------------------------------------------------
+# OBJECTIVE: Implement Neumann Boundaries (Insulation) using a staggered grid.
+# DISCRETIZATION: h = L / (N - 2)
+# BOUNDARY LOGIC: T[0] = T[1] and T[N-1] = T[N-2] (Points Outside my Rod)
+# ==============================================================================
+
+def run_garcia_neumann(N=61, tau=1e-4, L=1.0, kappa=1.0, nstep=1500, x0=0.0):
+    """
+    Solves the 1D diffusion equation with insulated boundaries.
+    x0: Initial position of the delta-spike.
+    """
+    # 1. Staggered Grid Setup
+    h = L / (N - 2)
+    coeff = kappa * tau / h**2
+    
+    # Grid: x_i = (i - 1.5)*h - L/2 for i = 1 to N
+    indices = np.arange(1, N + 1)
+    x_axis = (indices - 1.5) * h - L/2
+    
+    # 2. Initial Condition
+    tt = np.zeros(N)
+    # Find index closest to our target x0 (0.0 or 0.25)
+    center_idx = np.argmin(np.abs(x_axis - x0))
+    tt[center_idx] = 1.0 / h 
+
+    # 3. Evolution Loop
+    for n in range(nstep):
+        # Interior update (FTCS)
+        # We only update from index 1 to N-2
+        tt[1:-1] = tt[1:-1] + coeff * (tt[2:] + tt[0:-2] - 2*tt[1:-1])
+        
+        # NEUMANN BOUNDARY UPDATE
+        # Force the Non-existant cells to match their neighbors (slope = 0)
+        tt[0] = tt[1]      # Left wall insulation
+        tt[-1] = tt[-2]    # Right wall insulation
+        
+    return x_axis, tt
+
+# --- MASTER EXECUTION BLOCK ---
+plt.style.use('dark_background')
+plt.figure(figsize=(10, 6))
+
+# Part A: Centered Spike
+x_a, res_a = run_garcia_neumann(x0=0.0)
+plt.plot(x_a, res_a, color='orange', linewidth=2, label='Part A: Centered (x=0)')
+
+# Part B: Offset Spike (L/4 = 0.25)
+x_b, res_b = run_garcia_neumann(x0=0.25)
+plt.plot(x_b, res_b, color='cyan', linestyle='--', linewidth=2, label='Part B: Offset (x=L/4)')
+
+# Formatting for the "Stud" Report
+plt.title(r"Exercise 3: Neumann Boundary Analysis (Staggered Grid)", color='yellow', fontsize=14)
+plt.xlabel("Position (x)")
+plt.ylabel("Temperature (T)")
+
+# Draw the physical walls of the rod
+plt.axvline(-0.5, color='white', linestyle=':', alpha=0.5, label='Physical Wall (L/2)')
+plt.axvline(0.5, color='white', linestyle=':', alpha=0.5)
+
+plt.grid(alpha=0.1)
+plt.legend()
+plt.show()
+
+# --- VALIDATION CHECK ---
+# In a Neumann system, total 'Heat' (sum * h) should be conserved!
+print(f"Total Heat (Part A): {np.sum(res_a) * (1.0/(61-2)):.4f}")
+print(f"Total Heat (Part B): {np.sum(res_b) * (1.0/(61-2)):.4f}")
