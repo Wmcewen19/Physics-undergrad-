@@ -1,1 +1,416 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 6 - EXERCISE 8.1 (PROBLEM 8.1)
+# SCHEME: JACOBI RELAXATION (STEADY-STATE ELLIPTICAL SOLVER)
+# ==============================================================================
+# Purpose: To solve the 2D Laplace Equation (grad^2 Phi = 0) using iterative
+# relaxation. This script establishes the baseline steady-state potential 
+# for a system with Dirichlet boundary conditions.
+# ==============================================================================
+
+def main():
+    # --- Physical & Numerical Parameters ---
+    N = 30                # Grid resolution (NxN)
+    phi_top = 1.0         # Boundary potential (Volts)
+    iter_max = N**2       # Safeguard limit for convergence search
+    tolerance = 1e-4      # Garcia's target fractional change metric
+    
+    # --- Grid Initialization ---
+    # phi: current potential state | new_phi: buffer for simultaneous update
+    phi = np.zeros((N, N))
+    phi[0, :] = phi_top   # Apply Dirichlet BC: Top plate at 1.0V
+    
+    new_phi = np.copy(phi)
+    history = []          # Tracking convergence progress
+
+    # --- Main Iterative Loop (The Relax Routine) ---
+    for i_iter in range(1, iter_max + 1):
+        change_sum = 0
+        
+        # Interior Node Update (Averaging Neighbors)
+        # i = row index (y-axis), j = column index (x-axis)
+        for i in range(1, N - 1):
+            for j in range(1, N - 1):
+                # The Jacobi Rule: phi is the average of 4 cardinal neighbors
+                new_phi[i,j] = 0.25 * (phi[i+1,j] + phi[i-1,j] + 
+                                       phi[i,j+1] + phi[i,j-1])
+                
+                # Garcia's Fractional Change Metric Calculation
+                if new_phi[i,j] != 0:
+                    change_sum += abs(1 - phi[i,j]/new_phi[i,j])
+        
+        # Calculate Normalized Fractional Change (Garcia Eq. 8.10)
+        fractional_change = change_sum / (N - 2)**2
+        history.append(fractional_change)
+        
+        # Simultaneous Update: Shift new values into the active grid
+        phi[:] = new_phi[:]
+        
+        # Exit Condition: Check if steady-state equilibrium is reached
+        if fractional_change < tolerance:
+            print(f"McEwen Labs Status: Convergence achieved at {i_iter} iterations.")
+            break
+            
+    # --- High-Fidelity Visualization ---
+    plt.figure(figsize=(9, 7))
+    
+    # Render smooth potential gradient using 'inferno' colormap
+    # np.flipud ensures the 1.0V plate remains at the top of the visualization
+    plot = plt.contourf(np.flipud(phi), levels=50, cmap='inferno')
+    
+    # Labelling with Raw Strings (r'') to prevent LaTeX syntax errors
+    cb = plt.colorbar(plot)
+    cb.set_label(r'Potential $\Phi(x,y)$ [Volts]', fontsize=12)
+    
+    plt.title(f"Exercise 8.1: Jacobi Potential Distribution\n"
+              f"Convergence: {i_iter} Iterations | Grid: {N}x{N}", fontsize=14)
+    plt.xlabel("Grid index (x)", fontsize=12)
+    plt.ylabel("Grid index (y)", fontsize=12)
+    
+    plt.grid(alpha=0.2)
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 6 - EXERCISE 2 (PROBLEM 8.3)
+# SCHEME: 3D JACOBI RELAXATION (VOLUMETRIC ELLIPTICAL SOLVER)
+# ==============================================================================
+# Purpose: To solve the 3D Laplace Equation (grad^2 Phi = 0) within a cubic 
+# volume. This script models a conducting box where the top face is held at 
+# a fixed potential while all other faces are grounded.
+# ==============================================================================
+
+def main():
+    # --- Physical & Numerical Parameters ---
+    N = 15                # Grid resolution per dimension (NxNxN)
+    phi_top = 1.0         # Boundary potential (Volts) on the z=L face
+    iter_max = 2000       # Iteration limit for volumetric convergence
+    tolerance = 1e-4      # Garcia's target fractional change metric
+    
+    # --- 3D Grid Initialization ---
+    # phi: Current volumetric state | new_phi: Simultaneous update buffer
+    phi = np.zeros((N, N, N))
+    
+    # Apply Dirichlet Boundary Condition: Top face (i=0) at 1.0V
+    # Note: In matrix indexing [i,j,k], i represents the primary vertical slice
+    phi[0, :, :] = phi_top  
+    
+    new_phi = np.copy(phi)
+    
+    # --- Main Iterative Loop (The 3D Relax Routine) ---
+    for i_iter in range(1, iter_max + 1):
+        change_sum = 0
+        num_interior = (N - 2)**3  # Total interior nodes in the volume
+        
+        # Triple-Nested Loop: Iterating through the X, Y, and Z interior space
+        for i in range(1, N - 1):
+            for j in range(1, N - 1):
+                for k in range(1, N - 1):
+                    
+                    # The 3D Jacobi Rule: phi is the average of 6 cardinal neighbors
+                    # (Up, Down, Left, Right, Front, Back)
+                    new_phi[i,j,k] = (1.0/6.0) * (phi[i+1,j,k] + phi[i-1,j,k] + 
+                                                  phi[i,j+1,k] + phi[i,j-1,k] + 
+                                                  phi[i,j,k+1] + phi[i,j,k-1])
+                    
+                    # Fractional Change Accumulation (Garcia Metric)
+                    if new_phi[i,j,k] != 0:
+                        change_sum += abs(1 - phi[i,j,k]/new_phi[i,j,k])
+        
+        # Calculate Normalized Fractional Change (Garcia Eq. 8.10 adapted for 3D)
+        fractional_change = change_sum / num_interior
+        
+        # Simultaneous Update: Shift volumetric buffer into active grid
+        phi[:] = new_phi[:]
+        
+        # Convergence Check: Has the volume reached electrostatic equilibrium?
+        if fractional_change < tolerance:
+            print(f"McEwen Labs Status: 3D Convergence achieved at {i_iter} iterations.")
+            break
+    else:
+        print("Warning: Max iterations reached. System may not be in equilibrium.")
+
+    # --- High-Fidelity Visualization (Central Cross-Section) ---
+    mid_plane = N // 2
+    plt.figure(figsize=(9, 7))
+    
+    # Extracting the 2D potential gradient from the center of the 3D box
+    # Viewing the X-Y plane at the midpoint of the Z-axis
+    plot = plt.contourf(phi[:, :, mid_plane], levels=50, cmap='inferno')
+    
+    cb = plt.colorbar(plot)
+    cb.set_label(r'Potential $\Phi(x,y,z_{mid})$ [Volts]', fontsize=12)
+    
+    plt.title(f"Exercise 8.3: 3D Laplace Potential (Center Slice)\n"
+              f"Convergence: {i_iter} Iterations | Grid: {N}^3", fontsize=14)
+    plt.xlabel("Grid index (x)", fontsize=12)
+    plt.ylabel("Grid index (y)", fontsize=12)
+    
+    # Ensure plot orientation matches physical setup
+    plt.gca().invert_yaxis()
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 6 - EXERCISE 3 (PROBLEM 8.4)
+# SCHEME: AUTOMATED SCALING SWEEP & POWER-LAW ANALYSIS
+# ==============================================================================
+# Purpose: To empirically prove the O(N^2) computational penalty of the 
+# Jacobi method. This script sweeps through multiple grid resolutions and 
+# extracts the scaling exponent using a log-log regression.
+# ==============================================================================
+
+def jacobi_solver(N):
+    """
+    Core engine that runs the relaxation for a specific grid size (N)
+    and returns the total iteration count until steady-state.
+    """
+    phi = np.zeros((N, N))
+    phi[0, :] = 1.0  # Dirichlet BC: High potential top plate
+    new_phi = np.copy(phi)
+    
+    # Safety limit to prevent infinite loops during testing
+    for it in range(1, N**3):
+        change_sum = 0
+        
+        # Interior Node Update: Averaging the 4 cardinal neighbors
+        for i in range(1, N - 1):
+            for j in range(1, N - 1):
+                new_phi[i, j] = 0.25 * (phi[i+1, j] + phi[i-1, j] + 
+                                        phi[i, j+1] + phi[i, j-1])
+                
+                # Garcia's Fractional Change Metric
+                if new_phi[i, j] != 0:
+                    change_sum += abs(1 - phi[i, j] / new_phi[i, j])
+        
+        # Normalize error across all interior points
+        fractional_change = change_sum / (N - 2)**2
+        phi[:] = new_phi[:]
+        
+        if fractional_change < 1e-4:
+            return it
+            
+    return N**3
+
+def main():
+    # --- Experimental Parameters ---
+    grid_sizes = np.array([10, 20, 30, 40, 50])
+    iterations = []
+
+    print("McEwen Labs: Initiating Automated Grid-Scaling Sweep...")
+    
+    for N in grid_sizes:
+        count = jacobi_solver(N)
+        iterations.append(count)
+        print(f"  > Grid {N}x{N} reached equilibrium in {count} iterations.")
+
+    iterations = np.array(iterations)
+
+    # --- Power-Law Math: Extracting the Exponent ---
+    # log(Iter) = a * log(N) + C. Slope 'a' is our scaling exponent.
+    params = np.polyfit(np.log(grid_sizes), np.log(iterations), 1)
+    exponent = params[0]
+    
+    print("-" * 50)
+    print(f"CALCULATED SCALING EXPONENT: {exponent:.3f}")
+    print("-" * 50)
+
+    # --- High-Fidelity Scaling Plot ---
+    plt.figure(figsize=(10, 6))
+    
+    # FIX: Explicitly defined marker='s' (squares) and linestyle='' to avoid errors
+    plt.loglog(grid_sizes, iterations, marker='s', linestyle='', color='blue', 
+               markersize=8, label='Experimental Jacobi Data')
+    
+    # Plot the line of best fit (theoretical path)
+    fit_line = np.exp(np.polyval(params, np.log(grid_sizes)))
+    plt.loglog(grid_sizes, fit_line, color='crimson', linestyle='--', 
+               label=f'Power Law Fit ($N^{{{exponent:.2f}}}$)')
+
+    plt.title("Exercise 8.4: Jacobi Convergence Scaling Analysis", fontsize=14)
+    plt.xlabel("Grid Resolution (N)", fontsize=12)
+    plt.ylabel("Iterations to Converge", fontsize=12)
+    plt.grid(True, which="both", ls="-", alpha=0.2)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 6 - EXERCISE 4 (PROBLEM 8.7)
+# SCHEME: ELECTRIC FIELD VECTOR MAPPING (E = -grad Phi)
+# ==============================================================================
+# Purpose: To derive the Electric Field vectors from the converged potential 
+# grid and visualize the electrostatic force lines using a quiver plot.
+# Adheres to Garcia's relaxation methodology and vectorized NumPy gradients.
+# ==============================================================================
+
+def main():
+    # --- Configuration ---
+    N = 50                # Grid Resolution (Garcia Baseline)
+    phi_top = 1.0         # Boundary Condition (Volts)
+    tolerance = 1e-5      # Convergence threshold for high-fidelity gradient
+    
+    # --- Step 1: Potential Solver (Jacobi Engine) ---
+    phi = np.zeros((N, N))
+    phi[0, :] = phi_top
+    new_phi = np.copy(phi)
+    
+    print("McEwen Labs: Computing Potential Gradient...")
+    for it in range(1, 5000):
+        # Vectorized Laplace Update (Slicing method for speed)
+        new_phi[1:-1, 1:-1] = 0.25 * (phi[2:, 1:-1] + phi[:-2, 1:-1] + 
+                                       phi[1:-1, 2:] + phi[1:-1, :-2])
+        
+        # Checking for steady-state equilibrium
+        if np.max(np.abs(new_phi - phi)) < tolerance:
+            print(f"Convergence achieved at {it} iterations.")
+            break
+        phi[:] = new_phi[:]
+
+    # --- Step 2: Electric Field Calculation (The Physics) ---
+    # The Electric Field is the negative gradient of the potential: E = -grad(phi)
+    # np.gradient handles the central difference for interior points
+    grad_y, grad_x = np.gradient(phi)
+    Ex = -grad_x
+    Ey = -grad_y
+
+    # --- Step 3: High-Fidelity Visualization ---
+    plt.figure(figsize=(10, 8))
+    
+    # Potential Heat Map
+    # origin='upper' ensures the 1.0V plate stays at the top of the plot
+    plt.imshow(phi, cmap='inferno', origin='upper', extent=[0, N, N, 0])
+    plt.colorbar(label=r'Potential $\Phi$ [V]')
+    
+    # Overlay the Quiver (Arrow) Plot
+    # skip=4: We plot every 4th point so the field lines are visible, not messy.
+    skip = 4
+    x, y = np.meshgrid(np.arange(N), np.arange(N))
+    
+    plt.quiver(x[::skip, ::skip], y[::skip, ::skip], 
+               Ex[::skip, ::skip], Ey[::skip, ::skip], 
+               color='white', pivot='mid', scale=None, 
+               width=0.005, headwidth=3)
+
+    # Note: Using r"" (Raw Strings) to prevent LaTeX escape sequence errors
+    plt.title(r"Exercise 8.7: Electric Field Vector Map ($\vec{E} = -\nabla \Phi$)")
+    plt.xlabel("Grid index (x)")
+    plt.ylabel("Grid index (y)")
+    
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 6 - EXERCISE 5 (PROBLEM 8.10)
+# SCHEME: SUCCESSIVE OVER-RELAXATION (SOR)
+# ==============================================================================
+# Purpose: To demonstrate the massive efficiency gain of the SOR method 
+# over the Jacobi method using an optimal relaxation parameter omega.
+# ==============================================================================
+
+def main():
+    N = 50
+    phi = np.zeros((N, N))
+    phi[0, :] = 1.0  # Top plate at 1.0V
+    
+    # --- SOR Specific Parameters ---
+    # Optimal omega for a square grid
+    omega = 2.0 / (1.0 + np.pi / N)
+    tolerance = 1e-4
+    max_iter = 10000
+    
+    print(f"McEwen Labs: Initiating SOR Solver (Omega = {omega:.4f})")
+
+    for it in range(1, max_iter):
+        old_phi = np.copy(phi) # Just for checking error
+        
+        # SOR happens in-place. We don't use a 'new_phi' buffer.
+        for i in range(1, N-1):
+            for j in range(1, N-1):
+                # Standard average
+                phi_star = 0.25 * (phi[i+1,j] + phi[i-1,j] + 
+                                   phi[i,j+1] + phi[i,j-1])
+                
+                # Over-relaxation step
+                phi[i,j] = (1 - omega) * phi[i,j] + omega * phi_star
+        
+        # Check convergence using Garcia's fractional change
+        mask = phi != 0
+        diff = np.sum(np.abs(1 - old_phi[mask] / phi[mask]))
+        fractional_change = diff / (N - 2)**2
+        
+        if fractional_change < tolerance:
+            print(f"SOR converged in {it} iterations.")
+            break
+
+    # --- Visualization ---
+    plt.figure(figsize=(8, 6))
+    plt.imshow(phi, cmap='inferno')
+    plt.colorbar(label='Potential (V)')
+    plt.title(f"Problem 8.10: SOR Final Potential (N={N}, Iterations={it})")
+    plt.show()
+
+if __name__ == "__main__":
+    main()
+
+
+
 
