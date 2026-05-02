@@ -1,80 +1,87 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # ==============================================================================
-# MAD SCIENTIST LAB NOTES: PROJECT 4 - EXERCISE 6.3
+# MCEWEN LABS: PROJECT 4 - HEAT DIFFUSION ENGINE (GARCIA 6.3)
 # ------------------------------------------------------------------------------
+# NOTE TO SELF: This is the baseline FTCS (Forward Time Centered Space) solver.
+# We are simulating how a single "pulse" of heat spreads in a 1D rod.
 # OBJECTIVE: Find the 'Numerical Breaking Point' of the 1D Diffusion Equation.
 # We center the rod at 0 so the boundaries sit at +/- 0.5.
 # ==============================================================================
 
-def run_trial(tau, N=61, kappa=1.0, L=1.0, nstep=300):
-    """The Core Marching Engine: Forward Time, Centered Space."""
-    h = L / (N - 1)
-    coeff = kappa * tau / h**2
+# --- PARAMETER BLOCK (The Knobs and Dials) ---
+N = 61               # Grid resolution. Stability "cliff" is at N=101.
+tau = 1.0e-4         # Time step. If tau > 1.38e-4, the math explodes.
+L, kappa = 1.0, 1.0  # Length of rod and Thermal Diffusivity constant.
+nstep = 1500         # How long to let the simulation run.
+nplots = 50          # How many "snapshots" to save for the 3D mesh.
+# ---------------------------------------------
+
+# --- SETUP THE UNIVERSE ---
+h = L / (N - 1)              # Distance between grid points.
+coeff = kappa * tau / h**2   # THE STABILITY COEFF. MUST BE <= 0.5!
+x = np.linspace(-L/2, L/2, N)# Create the physical x-axis from -0.5 to 0.5.
+
+# Initialize Temperature array 'tt' with all zeros.
+tt = np.zeros(N)
+# Place the initial "Spike" (Delta Function) in the dead center.
+# We divide by h so the "Area" under the spike equals 1.0 (Conservation of Energy).
+tt[int(N/2)] = 1.0 / h 
+
+# --- DATA ARCHIVE FOR PLOTTING ---
+# We store results in 'ttplot' matrix: Rows = Position, Columns = Time Snapshots.
+ttplot = np.zeros((N, nplots))
+tplot = np.zeros(nplots)
+plot_step = nstep / nplots
+
+# --- MAIN PHYSICS LOOP (The Evolution) ---
+print(f"STABILITY REPORT: Coeff is {coeff:.4f}")
+
+for istep in range(nstep):
     
-    x_axis = np.linspace(-L/2, L/2, N) 
-    tt = np.zeros(N)
+    # THE FTCS CORE: This is the vectorized version of Garcia's loop.
+    # New Temp = Old Temp + Coeff * (Temp_Right + Temp_Left - 2*Temp_Center)
+    # We only update 1 to -1 because the ends (0 and -1) are fixed by boundaries.
+    tt[1:-1] = tt[1:-1] + coeff * (tt[2:] + tt[0:-2] - 2*tt[1:-1])
     
-    # Delta spike at x=0 (Index 30 for N=61)
-    center_idx = int((N - 1) / 2)
-    tt[center_idx] = 1.0 / h 
+    # DIRICHLET BOUNDARY CONDITIONS:
+    # Both ends of the rod are stuck in ice (T = 0).
+    tt[0] = 0; tt[-1] = 0 
     
-    for _ in range(nstep):
-        # Update interior points; skip ends (Dirichlet B.C.s = 0)
-        tt[1:-1] = tt[1:-1] + coeff * (tt[2:] + tt[0:-2] - 2*tt[1:-1])
-        
-    return x_axis, tt, coeff
+    # SNAPSHOT LOGIC: Every few steps, save the current state to our 2D array.
+    if (istep % plot_step) < 1:
+        iplot = int(istep / plot_step)
+        if iplot < nplots:
+            ttplot[:, iplot] = tt
+            tplot[iplot] = istep * tau
 
-def plot_individual(x, tt, tau, c, trial_num):
-    """Plotting logic for isolated trials."""
-    plt.style.use('dark_background')
-    plt.figure(figsize=(8, 5))
-    plt.plot(x, tt, color='cyan', label=f'Tau={tau}')
-    plt.title(f"Trial {trial_num}: Stability Check (Coeff={c:.3f})")
-    plt.xlabel("Position (x)")
-    plt.ylabel("Temperature (T)")
-    plt.grid(alpha=0.2)
-    plt.legend()
-    plt.show()
+# --- THE DUAL-VISUAL INTERFACE ---
+fig = plt.figure(figsize=(14, 7))
 
-# --- INDIVIDUAL EXECUTION BLOCKS ---
+# 1. THE 3D SURFACE (The "Tent")
+# This shows the temperature 'melting' over time.
+ax1 = fig.add_subplot(121, projection='3d')
+T_mesh, X_mesh = np.meshgrid(tplot, x)
+ax1.plot_surface(X_mesh, T_mesh, ttplot, cmap='viridis', edgecolor='black', linewidth=0.1)
+ax1.set_title("3D Diffusion Surface")
+ax1.set_zlabel("Temperature T(x,t)")
 
-# Trial 1: High Precision (Stable) [cite: 281]
-x1, res1, c1 = run_trial(1e-5)
-plot_individual(x1, res1, 1e-5, c1, 1)
+# 2. THE CONTOUR PLOT (The "Ripples")
+# This is Figure 6.7 in Garcia. Top-down view of the heat spreading.
+ax2 = fig.add_subplot(122)
+# Levels: We start at 1.0 to keep the plot clean and avoid crowded labels at t=0.
+levels = [1, 2, 3, 4, 5, 6, 8, 10] 
+cp = ax2.contour(tplot, x, ttplot, levels=levels, colors='black')
+# fmt='%1.0f' keeps the labels as whole numbers.
+ax2.clabel(cp, inline=True, fontsize=9, fmt='%1.0f')
 
-# Trial 2: Stable Spread [cite: 281]
-x2, res2, c2 = run_trial(5e-5)
-plot_individual(x2, res2, 5e-5, c2, 2)
+ax2.set_title("2D Temperature Contours")
+ax2.set_xlabel("Time"); ax2.set_ylabel("Position (x)")
+ax2.set_xlim(0, 0.03) # Focusing on the early diffusion window.
 
-# Trial 3: Boundary Limit (Stable) [cite: 281]
-x3, res3, c3 = run_trial(1e-4)
-plot_individual(x3, res3, 1e-4, c3, 3)
-
-# Trial 4: The Breaking Point (Unstable)
-x4, res4, c4 = run_trial(5e-4)
-plot_individual(x4, res4, 5e-4, c4, 4)
-
-# Trial 5: Total Meltdown (Unstable)
-x5, res5, c5 = run_trial(1e-3)
-plot_individual(x5, res5, 1e-3, c5, 5)
-
-# --- MASTER OVERLAY SCRIPT ---
-tau_list = [1e-5, 5e-5, 1e-4, 5e-4, 1e-3]
-plt.figure(figsize=(12, 7))
-
-for i, t_val in enumerate(tau_list):
-    x_master, results_master, s_coeff = run_trial(t_val)
-    # Using r"..." to fix the LaTeX escape sequence warning
-    plt.plot(x_master, results_master, label=f"Trial {i+1}: $\\tau$={t_val} (C={s_coeff:.3f})")
-
-plt.title(r"Project 4 Master Sweep: $x \in [-0.5, 0.5]$ Stability Analysis", color='cyan')
-plt.xlabel("Position (x)")
-plt.ylabel("Temperature (T)")
-plt.axvline(0, color='white', linestyle='--', alpha=0.3) 
-plt.ylim(-5, 70) 
-plt.legend()
+plt.tight_layout()
 plt.show()
 
 
@@ -87,83 +94,85 @@ plt.show()
 
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # ==============================================================================
-# MAD SCIENTIST LAB NOTES: PROJECT 4 - EXERCISE 6.3 (PART 2)
+# MCEWEN LABS: PROJECT 4 - INSULATED BOUNDARIES (GARCIA 6.6)
 # ------------------------------------------------------------------------------
-# OBJECTIVE: Analyze how Grid Density (N) impacts numerical stability.
-# FIXED PARAMETER: Tau = 1.0e-4 (Solidly stable at N=61, but not at N=301).
-# PHYSICS: Center-spike IC on a rod spanning [-0.5, 0.5].
+# NOTE TO SELF: This uses NEUMANN boundary conditions (T' = 0).
+# Heat cannot escape the rod; it just reflects off the ends like a mirror.
 # ==============================================================================
 
-def run_n_trial(N_val, tau_fixed=1e-4, kappa=1.0, L=1.0, nstep=300):
-    """The Core Marching Engine for the N-Sweep."""
-    h = L / (N_val - 1) # Grid spacing shrinks as N grows
-    coeff = kappa * tau_fixed / h**2 # C grows with N^2
+# --- PARAMETER BLOCK ---
+N = 61               # Grid resolution.
+tau = 1.0e-4         # Time step. 
+L, kappa = 1.0, 1.0  
+nstep = 1500         
+nplots = 50          
+# -----------------------
+
+# --- STAGGERED GRID SETUP ---
+# In 6.6, we use (N-2) for spacing so the boundaries fall between points.
+h = L / (N - 2)              
+coeff = kappa * tau / h**2   
+
+# Staggered x-axis logic: ensures boundaries are at +/- L/2
+x = (np.arange(1, N + 1) - 1.5) * h - L/2
+
+tt = np.zeros(N)
+tt[int(N/2)] = 1.0 / h # Centered Delta Spike
+
+# Storage for the 3D visual
+ttplot = np.zeros((N, nplots))
+tplot = np.zeros(nplots)
+plot_step = nstep / nplots
+
+# --- MAIN PHYSICS LOOP ---
+print(f"STABILITY REPORT (6.6): Coeff is {coeff:.4f}")
+
+for istep in range(nstep):
     
-    x_axis = np.linspace(-L/2, L/2, N_val) 
-    tt = np.zeros(N_val)
+    # Interior update (Same math as 6.3)
+    tt[1:-1] = tt[1:-1] + coeff * (tt[2:] + tt[0:-2] - 2*tt[1:-1])
     
-    # Delta spike at x=0
-    center_idx = int((N_val - 1) / 2)
-    tt[center_idx] = 1.0 / h 
+    # NEUMANN BOUNDARY CONDITIONS (The "Mirror" Logic):
+    # Instead of T=0, we set the ghost point equal to its neighbor.
+    # This forces the slope (flux) at the boundary to be zero.
+    tt[0] = tt[1]     # Left boundary reflection
+    tt[-1] = tt[-2]   # Right boundary reflection
     
-    for _ in range(nstep):
-        # Dirichlet Boundaries: Fixed at 0
-        tt[1:-1] = tt[1:-1] + coeff * (tt[2:] + tt[0:-2] - 2*tt[1:-1])
-        
-    return x_axis, tt, coeff
+    if (istep % plot_step) < 1:
+        iplot = int(istep / plot_step)
+        if iplot < nplots:
+            ttplot[:, iplot] = tt
+            tplot[iplot] = istep * tau
 
-def plot_individual_n(x, tt, n_val, c, trial_num):
-    """Plotting logic for isolated N-sweeps."""
-    plt.style.use('dark_background')
-    plt.figure(figsize=(8, 5))
-    plt.plot(x, tt, color='magenta', label=f'N={n_val}')
-    plt.title(f"Trial {trial_num}: N Sweep Stability (Coeff={c:.3f})")
-    plt.xlabel("Position (x)")
-    plt.ylabel("Temperature (T)")
-    plt.grid(alpha=0.2)
-    plt.legend()
-    plt.show()
+# --- THE DUAL-VISUAL INTERFACE ---
+fig = plt.figure(figsize=(14, 7))
 
-# --- INDIVIDUAL EXECUTION BLOCKS (Varying N, Fixed Tau=1e-4) ---
+# 1. 3D Mesh
+ax1 = fig.add_subplot(121, projection='3d')
+T_mesh, X_mesh = np.meshgrid(tplot, x)
+ax1.plot_surface(X_mesh, T_mesh, ttplot, cmap='plasma', edgecolor='black', linewidth=0.1)
+ax1.set_title("3D Surface: Insulated Rod (6.6)")
+ax1.set_zlabel("Temperature T(x,t)")
 
-# Trial 1: Low Density (N=25)
-xn1, rn1, cn1 = run_n_trial(25)
-plot_individual_n(xn1, rn1, 25, cn1, 1) # Very stable (C=0.06)
+# 2. Contour Plot
+ax2 = fig.add_subplot(122)
+levels = [1, 2, 3, 4, 5, 6, 8, 10] 
+cp = ax2.contour(tplot, x, ttplot, levels=levels, colors='black')
+ax2.clabel(cp, inline=True, fontsize=9, fmt='%1.0f')
 
-# Trial 2: Standard Density (N=51)
-xn2, rn2, cn2 = run_n_trial(51)
-plot_individual_n(xn2, rn2, 51, cn2, 2) # Stable (C=0.25)
+ax2.set_title("Temperature Contour (Neumann)")
+ax2.set_xlabel("Time"); ax2.set_ylabel("Position (x)")
+ax2.set_xlim(0, 0.03)
 
-# Trial 3: Breaking Point Density (N=101)
-xn3, rn3, cn3 = run_n_trial(101)
-plot_individual_n(xn3, rn3, 101, cn3, 3) # UNSTABLE! (C=1.00)
-
-# Trial 4: High Density (N=201)
-xn4, rn4, cn4 = run_n_trial(201)
-plot_individual_n(xn4, rn4, 201, cn4, 4) # TOTAL NOISE (C=4.00)
-
-# Trial 5: Max Density (N=301)
-xn5, rn5, cn5 = run_n_trial(301)
-plot_individual_n(xn5, rn5, 301, cn5, 5) # MELTDOWN (C=9.00)
-
-# --- MASTER N-SWEEP OVERLAY SCRIPT ---
-N_list = [25, 51, 101, 201, 301]
-tau_fixed = 1e-4
-plt.figure(figsize=(12, 7))
-
-for i, n_val in enumerate(N_list):
-    x_m, res_m, s_c = run_n_trial(n_val, tau_fixed)
-    plt.plot(x_m, res_m, label=f"Trial {i+1}: N={n_val} (C={s_c:.3f})")
-
-plt.title(r"Project 4 Domain Sweep: $x \in [-0.5, 0.5]$ @ $\tau=1.0 \times 10^{-4}$", color='magenta')
-plt.xlabel("Position (x)")
-plt.ylabel("Temperature (T)")
-plt.axvline(0, color='white', linestyle='--', alpha=0.3) 
-plt.ylim(-10, 150) # Catching those high spikes
-plt.legend()
+plt.tight_layout()
 plt.show()
+
+# Verification: Total heat should stay constant (Sum of tt * h)
+total_heat = np.sum(tt[1:-1]) * h
+print(f"Conservation Check: Total Heat = {total_heat:.4f}")
 
 
 
@@ -175,73 +184,184 @@ plt.show()
 
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # ==============================================================================
-# PROJECT NOTES: PROJECT 4 - EXERCISE 6.6
+# MCEWEN LABS: PROJECT 4 - EXERCISE 6.7 (PERIODIC WRAP-AROUND)
 # ------------------------------------------------------------------------------
-# OBJECTIVE: Implement Neumann Boundaries (Insulation) using a staggered grid.
-# DISCRETIZATION: h = L / (N - 2)
-# BOUNDARY LOGIC: T[0] = T[1] and T[N-1] = T[N-2] (Points Outside my Rod)
+# NOTE TO SELF: 
+# Set x0 = 0.0 for Part A (Centered Spike)
+# Set x0 = 0.25 for Part B (Offset Spike / Portal Proof)
 # ==============================================================================
 
-def run_garcia_neumann(N=61, tau=1e-4, L=1.0, kappa=1.0, nstep=1500, x0=0.0):
-    """
-    Solves the 1D diffusion equation with insulated boundaries.
-    x0: Initial position of the delta-spike.
-    """
-    # 1. Staggered Grid Setup
-    h = L / (N - 2)
-    coeff = kappa * tau / h**2
+# --- PARAMETER BLOCK (EDIT THESE FOR EACH TRIAL) ---
+x0 = 0.0             # <--- THE ONLY KNIGHT TO MOVE. SET x0 = 0.0 or x0 = 0.25
+N = 61               # Grid resolution (default 61)
+tau = 1.0e-4         # Time step (default 1e-4)
+nstep = 1500         # Total iterations
+nplots = 50          # Number of snapshots for plotting
+# --------------------------------------------------
+
+# Physical Constants (Garcia defaults)
+L, kappa = 1.0, 1.0 
+
+# Staggered Grid Initialization (L/(N-2))
+# The staggered grid is mandatory for Periodic BCs to work correctly.
+h = L / (N - 2)
+coeff = kappa * tau / h**2
+x = (np.arange(1, N + 1) - 1.5) * h - L/2
+tt = np.zeros(N)
+
+# Automaticaly find the index closest to your x0 setting
+# This ensures conservation of energy by using 1/h for the spike amplitude.
+center_idx = np.argmin(np.abs(x - x0))
+tt[center_idx] = 1.0 / h 
+
+ttplot = np.zeros((N, nplots))
+tplot = np.zeros(nplots)
+plot_step = nstep / nplots
+
+print(f"--- 6.7 SYSTEM REPORT ---")
+print(f"Running Trial: x0={x0:.2f} | N={N} | tau={tau:.1e}")
+print(f"Stability Coeff: {coeff:.4f} | Ring Heat Sum: {np.sum(tt[1:-1])*h:.4f}")
+
+# Main Physics Evolution
+for istep in range(nstep):
     
-    # Grid: x_i = (i - 1.5)*h - L/2 for i = 1 to N
-    indices = np.arange(1, N + 1)
-    x_axis = (indices - 1.5) * h - L/2
+    # FTCS Vectorized Interior Update
+    tt[1:-1] = tt[1:-1] + coeff * (tt[2:] + tt[0:-2] - 2*tt[1:-1])
     
-    # 2. Initial Condition
-    tt = np.zeros(N)
-    # Find index closest to our target x0 (0.0 or 0.25)
-    center_idx = np.argmin(np.abs(x_axis - x0))
-    tt[center_idx] = 1.0 / h 
+    # PERIODIC BOUNDARY CONDITIONS (The "Portal" Logic)
+    # The ghost cells must mirror the interior edges seamlessy.
+    tt[0] = tt[-2]   # Left portal link ( ghost 0 -> real N-2 )
+    tt[-1] = tt[1]   # Right portal link ( ghost N-1 -> real 1 )
+    
+    # Snapshot storage
+    if (istep % plot_step) < 1:
+        iplot = int(istep / plot_step)
+        if iplot < nplots:
+            ttplot[:, iplot] = tt
+            tplot[iplot] = istep * tau
 
-    # 3. Evolution Loop
-    for n in range(nstep):
-        # Interior update (FTCS)
-        # We only update from index 1 to N-2
-        tt[1:-1] = tt[1:-1] + coeff * (tt[2:] + tt[0:-2] - 2*tt[1:-1])
-        
-        # NEUMANN BOUNDARY UPDATE
-        # Force the Non-existant cells to match their neighbors (slope = 0)
-        tt[0] = tt[1]      # Left wall insulation
-        tt[-1] = tt[-2]    # Right wall insulation
-        
-    return x_axis, tt
+# --- THE DUAL-PLOT VISUAL (GARCIA FIGURE 6.7 STYLE) ---
+fig = plt.figure(figsize=(15, 7))
 
-# --- MASTER EXECUTION BLOCK ---
-plt.style.use('dark_background')
-plt.figure(figsize=(10, 6))
+# 1. 3D Mesh
+ax1 = fig.add_subplot(121, projection='3d')
+T_m, X_m = np.meshgrid(tplot, x)
+surf = ax1.plot_surface(X_m, T_m, ttplot, cmap='magma', edgecolor='black', linewidth=0.1)
+ax1.set_title(f"3D Mesh: Periodic Wrap (x0={x0:.2f})")
+ax1.set_zlabel("Temperature T(x,t)")
 
-# Part A: Centered Spike
-x_a, res_a = run_garcia_neumann(x0=0.0)
-plt.plot(x_a, res_a, color='orange', linewidth=2, label='Part A: Centered (x=0)')
+# 2. Temperature Contour (Cleaned Edition)
+ax2 = fig.add_subplot(122)
+# We set manual levels to avoid crowded labels at t=0
+levels = [1, 2, 3, 4, 5, 6, 8, 10]
+cp = ax2.contour(tplot, x, ttplot, levels=levels, colors='black')
+# Use clabel fixes to prevent text artifacts
+ax2.clabel(cp, inline=True, fontsize=9, fmt='%1.0f', inline_spacing=5)
 
-# Part B: Offset Spike (L/4 = 0.25)
-x_b, res_b = run_garcia_neumann(x0=0.25)
-plt.plot(x_b, res_b, color='cyan', linestyle='--', linewidth=2, label='Part B: Offset (x=L/4)')
+ax2.set_title("2D Contours: Teleportation Proof")
+ax2.set_xlabel("Time"); ax2.set_ylabel("Position x")
+ax2.set_xlim(0, 0.03) # Match Garcia's Early Diffusion Window
 
-# Formatting for the "Stud" Report
-plt.title(r"Exercise 3: Neumann Boundary Analysis (Staggered Grid)", color='yellow', fontsize=14)
-plt.xlabel("Position (x)")
-plt.ylabel("Temperature (T)")
-
-# Draw the physical walls of the rod
-plt.axvline(-0.5, color='white', linestyle=':', alpha=0.5, label='Physical Wall (L/2)')
-plt.axvline(0.5, color='white', linestyle=':', alpha=0.5)
-
-plt.grid(alpha=0.1)
-plt.legend()
+plt.tight_layout()
 plt.show()
 
-# --- VALIDATION CHECK ---
-# In a Neumann system, total 'Heat' (sum * h) should be conserved!
-print(f"Total Heat (Part A): {np.sum(res_a) * (1.0/(61-2)):.4f}")
-print(f"Total Heat (Part B): {np.sum(res_b) * (1.0/(61-2)):.4f}")
+# Final conservation proof - Should be 1.0000.
+print(f"Final Heat Check (6.7): {np.sum(tt[1:-1])*h:.4f}")
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 4 - EXERCISE 6.9 (DUFORT-FRANKEL)
+# ------------------------------------------------------------------------------
+# NOTE: This is an UNCONDITIONALLY STABLE explicit scheme.
+# It uses the "Leap-Frog" method to avoid the stability Breakdown.
+# ==============================================================================
+
+# --- PARAMETER BLOCK ---
+N = 61               
+tau = 1.0e-4         # Use 1e-4 for the seeding step to ensure stability
+L, kappa = 1.0, 1.0 
+nstep = 1500         
+nplots = 50          
+# -----------------------
+
+h = L / (N - 1)
+# alpha calculation
+alpha = (kappa * tau) / (h**2)
+x = np.linspace(-L/2, L/2, N)
+
+# Three time levels: Past (n-1), Current (n), Next (n+1)
+tt_past = np.zeros(N)
+tt_curr = np.zeros(N)
+tt_next = np.zeros(N)
+
+# 1. INITIAL CONDITION (Time level: n-1)
+# Using a very narrow Gaussian for a stable start
+sigma0 = 0.02
+tt_past = (1.0 / (sigma0 * np.sqrt(2 * np.pi))) * np.exp(-x**2 / (2 * sigma0**2))
+
+# 2. SEEDING STEP (Using FTCS to get Time level: n)
+# "FTCS scheme on the first step to get it started"
+tt_curr[1:-1] = tt_past[1:-1] + alpha * (tt_past[2:] + tt_past[0:-2] - 2*tt_past[1:-1])
+
+# Pre-calculate DuFort-Frankel coefficients
+# C1 = (1-2a)/(1+2a) and C2 = 2a/(1+2a)
+c1 = (1.0 - 2.0*alpha) / (1.0 + 2.0*alpha)
+c2 = (2.0*alpha) / (1.0 + 2.0*alpha)
+
+# Storage
+ttplot = np.zeros((N, nplots))
+tplot = np.zeros(nplots)
+plot_step = max(1, nstep // nplots)
+
+print(f"--- DUFORT-FRANKEL SYSTEM REPORT ---")
+print(f"Alpha: {alpha:.4f} | Starting Leap-Frog...")
+
+# --- MAIN PHYSICS LOOP ---
+for istep in range(nstep):
+    # DuFort-Frankel Update Rule
+    tt_next[1:-1] = c1 * tt_past[1:-1] + c2 * (tt_curr[2:] + tt_curr[0:-2])
+    
+    # Boundary Conditions (Cold Walls)
+    tt_next[0] = 0; tt_next[-1] = 0
+    
+    # Snapshot storage
+    if (istep % plot_step) == 0:
+        iplot = istep // plot_step
+        if iplot < nplots:
+            ttplot[:, iplot] = tt_curr
+            tplot[iplot] = istep * tau
+            
+    # Cycle the time levels
+    tt_past = np.copy(tt_curr)
+    tt_curr = np.copy(tt_next)
+
+# --- VISUALIZATION ---
+fig = plt.figure(figsize=(15, 7))
+ax1 = fig.add_subplot(121, projection='3d')
+T_m, X_m = np.meshgrid(tplot, x)
+ax1.plot_surface(X_m, T_m, ttplot, cmap='plasma', edgecolor='black', linewidth=0.1)
+ax1.set_title("3D Surface: Stable DuFort-Frankel")
+
+ax2 = fig.add_subplot(122)
+cp = ax2.contour(tplot, x, ttplot, levels=[0.2, 0.5, 1, 2, 5], colors='black')
+ax2.clabel(cp, inline=True, fontsize=9, fmt='%1.1f')
+ax2.set_title("Stable Temperature Contours")
+plt.tight_layout()
+plt.show()
+
+# Final conservation proof
+print(f"Final Heat Conservation Check: {np.sum(tt_curr)*h:.4f}")
