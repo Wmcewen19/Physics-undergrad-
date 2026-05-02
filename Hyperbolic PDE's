@@ -1,1 +1,362 @@
+import numpy as np
+import matplotlib.pyplot as plt
 
+# ==============================================================================
+# MCEWEN LABS: PROJECT 5 - THE 18-PLOT ADVECTION ENGINE (MASTER ANALYSIS)
+# ==============================================================================
+# Purpose: A systematic evaluation of the 1-D Transport Equation across 
+# three numerical schemes (FTCS, Lax, Lax-Wendroff). This script evaluates
+# stability as a function of the Courant Number and Driving Frequency.
+# ==============================================================================
+
+# --- Global Grid Setup ---
+N = 50                # Spatial nodes
+L = 1.0               # Domain length [m]
+x = np.linspace(0, L, N)
+h = x[1] - x[0]       # Delta x
+c = 1.0               # Advection velocity [m/s]
+
+# --- Parameter Sweeps ---
+taus = [0.015, 0.02, 0.03]            # Time steps (Varying Courant)
+frequencies = [10 * np.pi, 20 * np.pi] # Driving frequencies (Normal vs. High)
+schemes = ['FTCS', 'Lax', 'Lax-Wendroff']
+
+def run_simulation(scheme, tau, omega):
+    """
+    Executes a single advection simulation for a given scheme and parameters.
+    Returns the final state vector of the grid.
+    """
+    u = np.zeros(N)
+    u_new = np.zeros(N)
+    C = c * tau / h       # The Courant Number (CFL Stability Parameter)
+    n_steps = int(1.2 / tau) 
+    
+    for step in range(n_steps):
+        t = step * tau
+        # Boundary Condition: The Sine Pump (Inflow at x=0)
+        u[0] = np.sin(omega * t)
+        
+        # Interior Node Update Loop
+        for i in range(1, N - 1):
+            if scheme == 'FTCS':
+                # Centered difference (Inherently unstable for advection)
+                u_new[i] = u[i] - 0.5 * C * (u[i+1] - u[i-1])
+            
+            elif scheme == 'Lax':
+                # Stabilized via Artificial Dissipation (Spatial Averaging)
+                u_new[i] = 0.5 * (u[i+1] + u[i-1]) - 0.5 * C * (u[i+1] - u[i-1])
+            
+            elif scheme == 'Lax-Wendroff':
+                # Second-order accurate correction (Non-dissipative)
+                u_new[i] = (u[i] - 0.5 * C * (u[i+1] - u[i-1]) + 
+                            0.5 * (C**2) * (u[i+1] - 2*u[i] + u[i-1]))
+        
+        # Enforce Outflow Boundary Condition
+        u_new[N-1] = u_new[N-2]
+        u[:] = u_new[:]
+        
+    return u, C
+
+# --- The 18-Plot Matrix Visualization ---
+fig, axes = plt.subplots(6, 3, figsize=(15, 22))
+fig.suptitle("McEwen Labs: 18-Plot Stability & Convergence Analysis", fontsize=18, fontweight='bold')
+
+row = 0
+for omega in frequencies:
+    for scheme in schemes:
+        for i, tau in enumerate(taus):
+            ax = axes[row, i]
+            final_u, C = run_simulation(scheme, tau, omega)
+            
+            # Plotting the Final State
+            ax.plot(x, final_u, linewidth=1.5)
+            
+            # Subplot Annotation
+            ax.set_title(f"{scheme}\nC = {C:.2f} | ω = {omega/np.pi:.0f}π", fontsize=10)
+            ax.set_ylim(-2.5, 2.5) # Bounds set to capture FTCS divergence
+            ax.grid(True, linestyle='--', alpha=0.6)
+            
+            # Formatting labels
+            if i == 0: ax.set_ylabel("Amplitude (u)")
+            if row == 5: ax.set_xlabel("Position (x)")
+            
+        row += 1
+
+plt.tight_layout(rect=[0, 0.03, 1, 0.96])
+print("Simulations complete. Visualizing 18-plot matrix...")
+plt.show()
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# =============================================================================
+# MCEWEN LABS: PROJECT 5 - EXERCISE 7.4 (PART A)
+# SCHEME: LAX METHOD (FIRST-ORDER STABILIZATION)
+# =============================================================================
+# Purpose: To solve the 1-D Transport Equation using the Lax Method,
+# utilizing the 'advect' routine logic found in Garcia (Chapter 7).
+# =============================================================================
+
+def main():
+    # --- Numerical Parameters ---
+    N = 60                # Grid points
+    L = 1.0               # Domain length
+    x = np.linspace(0, L, N)
+    h = L / (N - 1)
+    c = 1.0               # Wave speed
+    tau = 0.012           # Time step
+    coeff = c * tau / h   # Courant number
+    omega = 10 * np.pi    # Driving frequency
+    
+    # --- Initialization ---
+    u = np.zeros(N)
+    new_u = np.zeros(N)
+    n_steps = 150 
+
+    # --- Main Advect Loop ---
+    for i_step in range(n_steps):
+        # 1. Update Boundary (The Sine Pump)
+        t = i_step * tau
+        u[0] = np.sin(omega * t)
+        
+        # 2. Interior Update (Lax Logic)
+        for i in range(1, N - 1):
+            # Replaces u[i] with average of neighbors: Garcia Eq. (7.10)
+            new_u[i] = 0.5 * (u[i+1] + u[i-1]) - 0.5 * coeff * (u[i+1] - u[i-1])
+            
+        # 3. Update active array and enforce Outflow
+        u[1:N-1] = new_u[1:N-1]
+        u[N-1] = u[N-2] 
+
+    # --- Visualization ---
+    plt.figure(figsize=(10, 5))
+    plt.plot(x, u, 'r-', label='Lax Method (First-Order)')
+    plt.axhline(0, color='black', alpha=0.3)
+    plt.title(f"Exercise 7.4: Lax Scheme (Courant = {coeff:.3f})")
+    plt.xlabel("Position x")
+    plt.ylabel("Amplitude u")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# =============================================================================
+# MC-EWEN LABS: PROJECT 5 - EXERCISE 7.4 (PART B)
+# SCHEME: LAX-WENDROFF (SECOND-ORDER ACCURACY)
+# =============================================================================
+# Purpose: To solve the 1-D Transport Equation using Lax-Wendroff logic,
+# adding the second-order stabilization term (coeff^2).
+# =============================================================================
+
+def main():
+    # --- Numerical Parameters ---
+    N = 60
+    L = 1.0
+    x = np.linspace(0, L, N)
+    h = L / (N - 1)
+    c = 1.0
+    tau = 0.012
+    coeff = c * tau / h   # Courant number
+    omega = 10 * np.pi
+    
+    # --- Initialization ---
+    u = np.zeros(N)
+    new_u = np.zeros(N)
+    n_steps = 150 
+
+    # --- Main Advect Loop ---
+    for i_step in range(n_steps):
+        # 1. Update Boundary
+        t = i_step * tau
+        u[0] = np.sin(omega * t)
+        
+        # 2. Interior Update (Lax-Wendroff Logic)
+        for i in range(1, N - 1):
+            # Second-order correction term: Garcia Eq. (7.18)
+            new_u[i] = (u[i] - 0.5 * coeff * (u[i+1] - u[i-1]) + 
+                        0.5 * (coeff**2) * (u[i+1] + u[i-1] - 2*u[i]))
+            
+        # 3. Update active array and enforce Outflow
+        u[1:N-1] = new_u[1:N-1]
+        u[N-1] = u[N-2] 
+
+    # --- Visualization ---
+    plt.figure(figsize=(10, 5))
+    plt.plot(x, u, 'b-', label='Lax-Wendroff (Second-Order)')
+    plt.axhline(0, color='black', alpha=0.3)
+    plt.title(f"Exercise 7.4: Lax-Wendroff Scheme (Courant = {coeff:.3f})")
+    plt.xlabel("Position x")
+    plt.ylabel("Amplitude u")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+if __name__ == "__main__":
+    main()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 5 - EXERCISE 7.5
+# SCHEME: UPWIND METHOD (LEFT-SIDED DERIVATIVE)
+# ==============================================================================
+# Purpose: To implement the directionally-biased Upwind scheme for the 1-D 
+# Transport Equation, utilizing a left-sided spatial derivative for stability.
+# ==============================================================================
+
+def main():
+    # --- Numerical Parameters ---
+    N = 60                # Grid nodes
+    L = 1.0               # Domain length
+    x = np.linspace(0, L, N)
+    h = L / (N - 1)       # Spatial step
+    c = 1.0               # Advection velocity
+    tau = 0.012           # Time step
+    C = c * tau / h       # Courant Number (CFL condition)
+    omega = 10 * np.pi    # Driving frequency
+    
+    # --- Initialization ---
+    u = np.zeros(N)
+    new_u = np.zeros(N)
+    n_steps = 150 
+
+    # --- Main Advect Loop (Upwind Logic) ---
+    for i_step in range(n_steps):
+        # Update Pump Boundary Condition (x=0)
+        t = i_step * tau
+        u[0] = np.sin(omega * t)
+        
+        # Interior Update: Garcia Problem 7.5 (Left Derivative)
+        for i in range(1, N):
+            # new_u[i] = u[i] - C * (u[i] - u[i-1])
+            new_u[i] = u[i] - (c * tau / h) * (u[i] - u[i-1])
+            
+        # Update active array and enforce Outflow (Last point is handled by loop)
+        u[1:] = new_u[1:]
+
+    # --- Visualization ---
+    plt.figure(figsize=(10, 6))
+    plt.plot(x, u, color='forestgreen', linewidth=2, label='Upwind Scheme (First-Order)')
+    plt.axhline(0, color='black', alpha=0.3)
+    
+    plt.title(f"Exercise 7.5: Upwind Method (Courant C = {C:.3f})")
+    plt.xlabel("Position (x)")
+    plt.ylabel("Amplitude (u)")
+    plt.legend(loc='upper right')
+    plt.grid(True, linestyle='--', alpha=0.6)
+    
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MC-EWEN LABS: PROJECT 5 - EXERCISE 7.6
+# SCHEME: LEAP-FROG (THREE-LEVEL SECOND-ORDER SCHEME)
+# ==============================================================================
+# Purpose: To implement the second-order Leap-Frog scheme. This method 
+# minimizes numerical dissipation by using a centered-time derivative.
+# ==============================================================================
+
+def main():
+    # --- Numerical Parameters ---
+    N = 60
+    L = 1.0
+    x = np.linspace(0, L, N)
+    h = L / (N - 1)
+    c = 1.0
+    tau = 0.01
+    C = c * tau / h       # The Courant Number
+    omega = 10 * np.pi
+    n_steps = 150
+
+    # --- Initialization ---
+    # Leap-Frog requires three time levels: n-1, n, and n+1
+    u_prev = np.zeros(N)  # Time step n-1
+    u_curr = np.zeros(N)  # Time step n
+    u_next = np.zeros(N)  # Time step n+1
+
+    # --- 1. The Starter Step (Lax Method) ---
+    # We use a single Lax step to generate the 'u_curr' from 'u_prev'
+    u_prev[0] = np.sin(omega * 0)
+    u_curr[0] = np.sin(omega * tau)
+    
+    for i in range(1, N - 1):
+        # Lax update to kickstart the first interval
+        u_curr[i] = 0.5*(u_prev[i+1] + u_prev[i-1]) - 0.5*C*(u_prev[i+1] - u_prev[i-1])
+
+    # --- 2. Main Leap-Frog Loop ---
+    for i_step in range(1, n_steps):
+        # Update Pump Boundary Condition at the future time level
+        t_next = (i_step + 1) * tau
+        u_next[0] = np.sin(omega * t_next)
+        
+        # Leap-Frog Update: Center-Space, Center-Time (Garcia Eq 7.29)
+        for i in range(1, N - 1):
+            u_next[i] = u_prev[i] - C * (u_curr[i+1] - u_curr[i-1])
+            
+        # Enforce Outflow Boundary Condition
+        u_next[N-1] = u_next[N-2]
+        
+        # Recursive Time-Shift: Move the window forward
+        u_prev[:] = u_curr[:]
+        u_curr[:] = u_next[:]
+
+    # --- Visualization ---
+    plt.figure(figsize=(10, 6))
+    plt.plot(x, u_curr, color='darkviolet', linewidth=2, label='Leap-Frog Scheme')
+    plt.axhline(0, color='black', alpha=0.3)
+    
+    plt.title(f"Exercise 7.6: Leap-Frog Method (Courant C = {C:.3f})")
+    plt.xlabel("Position (x)")
+    plt.ylabel("Amplitude (u)")
+    plt.legend(loc='upper right')
+    plt.grid(True, linestyle='--', alpha=0.6)
+    
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == "__main__":
+    main()
