@@ -1,75 +1,78 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # ==============================================================================
-# MCEWEN LABS: PROJECT 6 - EXERCISE 8.1 (PROBLEM 8.1)
-# SCHEME: JACOBI RELAXATION (STEADY-STATE ELLIPTICAL SOLVER)
+# MCEWEN LABS: PROJECT 6 - EXERCISE 1 (PROBLEM 8.1)
+# SCHEME: 2D JACOBI RELAXATION (THE BASELINE SOLVER)
 # ==============================================================================
-# Purpose: To solve the 2D Laplace Equation (grad^2 Phi = 0) using iterative
-# relaxation. This script establishes the baseline steady-state potential 
-# for a system with Dirichlet boundary conditions.
+# Purpose: To solve the 2D Laplace Equation (grad^2 Phi = 0) on a 50x50 grid.
+# This serves as our fundamental baseline for the project, modeling a 
+# conducting box where the top plate is hot (1.0V) and the others are grounded.
 # ==============================================================================
 
 def main():
     # --- Physical & Numerical Parameters ---
-    N = 30                # Grid resolution (NxN)
+    N = 50                # Grid resolution (50x50)
     phi_top = 1.0         # Boundary potential (Volts)
-    iter_max = N**2       # Safeguard limit for convergence search
-    tolerance = 1e-4      # Garcia's target fractional change metric
+    iter_max = 5000       # Safety cap for iterations
+    tolerance = 1e-4      # Garcia's fractional change threshold
     
     # --- Grid Initialization ---
-    # phi: current potential state | new_phi: buffer for simultaneous update
+    # phi: The active potential map | new_phi: The buffer for simultaneous updates
     phi = np.zeros((N, N))
-    phi[0, :] = phi_top   # Apply Dirichlet BC: Top plate at 1.0V
+    
+    # Apply Dirichlet Boundary Condition: Top edge (index 0) is held at 1.0V
+    phi[0, :] = phi_top  
     
     new_phi = np.copy(phi)
-    history = []          # Tracking convergence progress
+    
+    print(f" 2D Jacobi Solver on {N}x{N} grid...")
 
-    # --- Main Iterative Loop (The Relax Routine) ---
+    # --- Main Iterative Loop (The Relaxation Routine) ---
     for i_iter in range(1, iter_max + 1):
-        change_sum = 0
+        # We perform the Jacobi update: Every point is the average of its 4 neighbors.
+        # Vectorized slicing makes this way faster than a nested 'for' loop.
+        new_phi[1:-1, 1:-1] = 0.25 * (phi[2:, 1:-1] + phi[:-2, 1:-1] + 
+                                       phi[1:-1, 2:] + phi[1:-1, :-2])
         
-        # Interior Node Update (Averaging Neighbors)
-        # i = row index (y-axis), j = column index (x-axis)
-        for i in range(1, N - 1):
-            for j in range(1, N - 1):
-                # The Jacobi Rule: phi is the average of 4 cardinal neighbors
-                new_phi[i,j] = 0.25 * (phi[i+1,j] + phi[i-1,j] + 
-                                       phi[i,j+1] + phi[i,j-1])
-                
-                # Garcia's Fractional Change Metric Calculation
-                if new_phi[i,j] != 0:
-                    change_sum += abs(1 - phi[i,j]/new_phi[i,j])
+        # --- Garcia's Convergence Metric ---
+        # We check the average fractional change to see if the system is at equilibrium.
+        mask = new_phi != 0
+        diff = np.sum(np.abs(1 - phi[mask] / new_phi[mask]))
+        fractional_change = diff / (N - 2)**2
         
-        # Calculate Normalized Fractional Change (Garcia Eq. 8.10)
-        fractional_change = change_sum / (N - 2)**2
-        history.append(fractional_change)
-        
-        # Simultaneous Update: Shift new values into the active grid
+        # Simultaneous Update: Shift the buffer into the active grid
         phi[:] = new_phi[:]
         
-        # Exit Condition: Check if steady-state equilibrium is reached
         if fractional_change < tolerance:
-            print(f"McEwen Labs Status: Convergence achieved at {i_iter} iterations.")
+            print(f"Status: 2D Convergence achieved at {i_iter} iterations.")
             break
-            
-    # --- High-Fidelity Visualization ---
-    plt.figure(figsize=(9, 7))
+    else:
+        print("Warning: Max iterations reached. Equilibrium not fully established.")
+
+    # --- High-Fidelity Visualization (The "Smoking Gun" Plots) ---
+    # We need both a contour map and a 3D mesh surface to satisfy Garcia 8.1.
     
-    # Render smooth potential gradient using 'inferno' colormap
-    # np.flipud ensures the 1.0V plate remains at the top of the visualization
-    plot = plt.contourf(np.flipud(phi), levels=50, cmap='inferno')
-    
-    # Labelling with Raw Strings (r'') to prevent LaTeX syntax errors
-    cb = plt.colorbar(plot)
-    cb.set_label(r'Potential $\Phi(x,y)$ [Volts]', fontsize=12)
-    
-    plt.title(f"Exercise 8.1: Jacobi Potential Distribution\n"
-              f"Convergence: {i_iter} Iterations | Grid: {N}x{N}", fontsize=14)
-    plt.xlabel("Grid index (x)", fontsize=12)
-    plt.ylabel("Grid index (y)", fontsize=12)
-    
-    plt.grid(alpha=0.2)
+    fig = plt.figure(figsize=(14, 6))
+
+    # Plot 1: 2D Contour Map (The Top-Down View)
+    ax1 = fig.add_subplot(121)
+    cont = ax1.contourf(phi, levels=50, cmap='magma')
+    fig.colorbar(cont, ax=ax1, label=r'Potential $\Phi$ [V]')
+    ax1.set_title("Problem 8.1: 2D Potential Contour Map")
+    ax1.set_xlabel("x-index")
+    ax1.set_ylabel("y-index")
+    ax1.invert_yaxis() # Match the physical "Top Plate" orientation
+
+    # Plot 2: 3D Mesh Surface (The "Mountain" View)
+    ax2 = fig.add_subplot(122, projection='3d')
+    X, Y = np.meshgrid(np.arange(N), np.arange(N))
+    surf = ax2.plot_surface(X, Y, phi, cmap='magma', edgecolor='black', lw=0.1)
+    ax2.set_title("Problem 8.1: 3D Potential Mesh Surface")
+    ax2.set_zlabel(r"Potential $\Phi$ (V)")
+    ax2.view_init(elev=30, azim=45) # Angle it so we can see the "downhill" slope
+
     plt.tight_layout()
     plt.show()
 
@@ -83,88 +86,105 @@ if __name__ == "__main__":
 
 
 
-
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # ==============================================================================
 # MCEWEN LABS: PROJECT 6 - EXERCISE 2 (PROBLEM 8.3)
-# SCHEME: 3D JACOBI RELAXATION (VOLUMETRIC ELLIPTICAL SOLVER)
+# SCHEME: 3D JACOBI VOLUMETRIC RELAXATION (THE CUBIC SOLVER)
 # ==============================================================================
 # Purpose: To solve the 3D Laplace Equation (grad^2 Phi = 0) within a cubic 
-# volume. This script models a conducting box where the top face is held at 
-# a fixed potential while all other faces are grounded.
+# volume. We’re modeling a conducting box with a 1.0V ceiling and grounded 
+# walls/floor. This is the high-fidelity version of our baseline 2D solver.
 # ==============================================================================
 
 def main():
     # --- Physical & Numerical Parameters ---
-    N = 15                # Grid resolution per dimension (NxNxN)
+    N = 15                # Grid resolution per dimension (15x15x15)
     phi_top = 1.0         # Boundary potential (Volts) on the z=L face
-    iter_max = 2000       # Iteration limit for volumetric convergence
+    iter_max = 2000       # Safety cap for the volumetric crunch
     tolerance = 1e-4      # Garcia's target fractional change metric
     
     # --- 3D Grid Initialization ---
-    # phi: Current volumetric state | new_phi: Simultaneous update buffer
+    # phi[z, y, x] mapping: We initialize the volume to zero and pin the ceiling.
     phi = np.zeros((N, N, N))
-    
-    # Apply Dirichlet Boundary Condition: Top face (i=0) at 1.0V
-    # Note: In matrix indexing [i,j,k], i represents the primary vertical slice
-    phi[0, :, :] = phi_top  
+    phi[0, :, :] = phi_top  # Dirichlet Boundary: Top face index at 1.0V
     
     new_phi = np.copy(phi)
     
+    print(f"McEwen Labs: Initiating 3D Volumetric Solver on {N}^3 grid...")
+
     # --- Main Iterative Loop (The 3D Relax Routine) ---
     for i_iter in range(1, iter_max + 1):
-        change_sum = 0
-        num_interior = (N - 2)**3  # Total interior nodes in the volume
         
-        # Triple-Nested Loop: Iterating through the X, Y, and Z interior space
-        for i in range(1, N - 1):
-            for j in range(1, N - 1):
-                for k in range(1, N - 1):
-                    
-                    # The 3D Jacobi Rule: phi is the average of 6 cardinal neighbors
-                    # (Up, Down, Left, Right, Front, Back)
-                    new_phi[i,j,k] = (1.0/6.0) * (phi[i+1,j,k] + phi[i-1,j,k] + 
-                                                  phi[i,j+1,k] + phi[i,j-1,k] + 
-                                                  phi[i,j,k+1] + phi[i,j,k-1])
-                    
-                    # Fractional Change Accumulation (Garcia Metric)
-                    if new_phi[i,j,k] != 0:
-                        change_sum += abs(1 - phi[i,j,k]/new_phi[i,j,k])
+        # 3D Jacobi Rule: Every interior node is the average of 6 cardinal neighbors.
+        # Vectorized slicing: (Up/Down, Left/Right, Front/Back)
+        new_phi[1:-1, 1:-1, 1:-1] = (1/6.0) * (
+            phi[2:, 1:-1, 1:-1] + phi[:-2, 1:-1, 1:-1] + # Z-axis neighbors
+            phi[1:-1, 2:, 1:-1] + phi[1:-1, :-2, 1:-1] + # Y-axis neighbors
+            phi[1:-1, 1:-1, 2:] + phi[1:-1, 1:-1, :-2]   # X-axis neighbors
+        )
         
-        # Calculate Normalized Fractional Change (Garcia Eq. 8.10 adapted for 3D)
-        fractional_change = change_sum / num_interior
+        # --- Garcia's Convergence Metric ---
+        # Checking normalized fractional change across the entire 3D volume.
+        mask = new_phi != 0
+        diff = np.sum(np.abs(1 - phi[mask] / new_phi[mask]))
+        fractional_change = diff / (N - 2)**3
         
-        # Simultaneous Update: Shift volumetric buffer into active grid
+        # Simultaneous Update: Moving the buffer into the active grid
         phi[:] = new_phi[:]
         
-        # Convergence Check: Has the volume reached electrostatic equilibrium?
         if fractional_change < tolerance:
-            print(f"McEwen Labs Status: 3D Convergence achieved at {i_iter} iterations.")
+            print(f"McEwen Labs Status: 3D Convergence reached at {i_iter} iterations.")
             break
     else:
-        print("Warning: Max iterations reached. System may not be in equilibrium.")
+        print("Warning: System did not reach equilibrium within iteration limit.")
 
-    # --- High-Fidelity Visualization (Central Cross-Section) ---
-    mid_plane = N // 2
-    plt.figure(figsize=(9, 7))
+    # --- High-Fidelity Visualization (Garcia 3b Compliance) ---
+    mid = N // 2
+    qtr = N // 4
     
-    # Extracting the 2D potential gradient from the center of the 3D box
-    # Viewing the X-Y plane at the midpoint of the Z-axis
-    plot = plt.contourf(phi[:, :, mid_plane], levels=50, cmap='inferno')
+    # Plotting Part 1: The Dual Contour Slices (r'...' raw strings for LaTeX)
+    fig1, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
     
-    cb = plt.colorbar(plot)
-    cb.set_label(r'Potential $\Phi(x,y,z_{mid})$ [Volts]', fontsize=12)
+    # Mid-plane (L/2)
+    p1 = ax1.contourf(phi[mid, :, :], levels=50, cmap='inferno')
+    fig1.colorbar(p1, ax=ax1, label=r'Potential $\Phi$ [V]')
+    ax1.set_title(r"3D Potential Slice: $z = L/2$")
+    ax1.set_xlabel("x-index"); ax1.set_ylabel("y-index")
+    ax1.invert_yaxis()
+
+    # Quarter-plane (L/4)
+    p2 = ax2.contourf(phi[qtr, :, :], levels=50, cmap='inferno')
+    fig1.colorbar(p2, ax=ax2, label=r'Potential $\Phi$ [V]')
+    ax2.set_title(r"3D Potential Slice: $z = L/4$")
+    ax2.set_xlabel("x-index"); ax2.set_ylabel("y-index")
+    ax2.invert_yaxis()
     
-    plt.title(f"Exercise 8.3: 3D Laplace Potential (Center Slice)\n"
-              f"Convergence: {i_iter} Iterations | Grid: {N}^3", fontsize=14)
-    plt.xlabel("Grid index (x)", fontsize=12)
-    plt.ylabel("Grid index (y)", fontsize=12)
-    
-    # Ensure plot orientation matches physical setup
-    plt.gca().invert_yaxis()
     plt.tight_layout()
+    plt.show()
+
+    # Plotting Part 2: The Mesh Surface (The 3D "Mountain")
+    # Using specific padding and view angles to prevent label cut-off.
+    fig2 = plt.figure(figsize=(11, 9))
+    ax3 = fig2.add_subplot(111, projection='3d')
+    X, Y = np.meshgrid(np.arange(N), np.arange(N))
+    
+    surf = ax3.plot_surface(X, Y, phi[mid, :, :], cmap='inferno', edgecolor='black', lw=0.1)
+    
+    ax3.set_title(r"3D Potential Mesh Surface at $z = L/2$", fontsize=14, pad=20)
+    ax3.set_xlabel("x-index", labelpad=10)
+    ax3.set_ylabel("y-index", labelpad=10)
+    
+    # FIX: Added labelpad to ensure Z-axis text doesn't clip
+    ax3.set_zlabel(r"Potential $\Phi$ (V)", labelpad=15)
+    
+    # Set view for maximum depth perception
+    ax3.view_init(elev=25, azim=45)
+    
+    fig2.colorbar(surf, ax=ax3, shrink=0.5, aspect=12, pad=0.1)
+    
     plt.show()
 
 if __name__ == "__main__":
@@ -280,68 +300,65 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # ==============================================================================
-# MCEWEN LABS: PROJECT 6 - EXERCISE 4 (PROBLEM 8.7)
-# SCHEME: ELECTRIC FIELD VECTOR MAPPING (E = -grad Phi)
+# MCEWEN LABS: PROJECT 6 - PROBLEM 4 (EXERCISE 8.7)
+# SCHEME: DUAL-MODE ELECTRIC FIELD MAPPING (PROPORTIONAL vs. NORMALIZED)
 # ==============================================================================
-# Purpose: To derive the Electric Field vectors from the converged potential 
-# grid and visualize the electrostatic force lines using a quiver plot.
-# Adheres to Garcia's relaxation methodology and vectorized NumPy gradients.
+# Purpose: Transform scalar potential into vector force fields.
+# Specs: High-contrast heatmap, proportional scaling, and unit-length flow.
 # ==============================================================================
 
 def main():
-    # --- Configuration ---
-    N = 50                # Grid Resolution (Garcia Baseline)
-    phi_top = 1.0         # Boundary Condition (Volts)
-    tolerance = 1e-5      # Convergence threshold for high-fidelity gradient
-    
-    # --- Step 1: Potential Solver (Jacobi Engine) ---
+    # --- Step 1: Potential Field Generation (Baseline 8.1) ---
+    N = 50
     phi = np.zeros((N, N))
-    phi[0, :] = phi_top
+    phi[0, :] = 1.0  # Dirichlet BC: Top plate held at 1.0V
     new_phi = np.copy(phi)
     
-    print("McEwen Labs: Computing Potential Gradient...")
-    for it in range(1, 5000):
-        # Vectorized Laplace Update (Slicing method for speed)
+    # Jacobi Relaxation Engine
+    for it in range(1, 4001):
         new_phi[1:-1, 1:-1] = 0.25 * (phi[2:, 1:-1] + phi[:-2, 1:-1] + 
                                        phi[1:-1, 2:] + phi[1:-1, :-2])
-        
-        # Checking for steady-state equilibrium
-        if np.max(np.abs(new_phi - phi)) < tolerance:
-            print(f"Convergence achieved at {it} iterations.")
+        if np.max(np.abs(phi - new_phi)) < 1e-5:
             break
         phi[:] = new_phi[:]
 
-    # --- Step 2: Electric Field Calculation (The Physics) ---
-    # The Electric Field is the negative gradient of the potential: E = -grad(phi)
-    # np.gradient handles the central difference for interior points
-    grad_y, grad_x = np.gradient(phi)
-    Ex = -grad_x
-    Ey = -grad_y
+    # --- Step 2: Vector Calculus (E = -grad Phi) ---
+    # np.gradient returns [dPhi/dy, dPhi/dx] for 2D arrays
+    Ey, Ex = np.gradient(-phi) 
+    magnitude = np.sqrt(Ex**2 + Ey**2)
 
-    # --- Step 3: High-Fidelity Visualization ---
-    plt.figure(figsize=(10, 8))
-    
-    # Potential Heat Map
-    # origin='upper' ensures the 1.0V plate stays at the top of the plot
-    plt.imshow(phi, cmap='inferno', origin='upper', extent=[0, N, N, 0])
-    plt.colorbar(label=r'Potential $\Phi$ [V]')
-    
-    # Overlay the Quiver (Arrow) Plot
-    # skip=4: We plot every 4th point so the field lines are visible, not messy.
-    skip = 4
-    x, y = np.meshgrid(np.arange(N), np.arange(N))
-    
-    plt.quiver(x[::skip, ::skip], y[::skip, ::skip], 
-               Ex[::skip, ::skip], Ey[::skip, ::skip], 
-               color='white', pivot='mid', scale=None, 
-               width=0.005, headwidth=3)
+    # --- Step 3: High-Fidelity Dual Visualization ---
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+    X, Y = np.meshgrid(np.arange(N), np.arange(N))
+    skip = (slice(None, None, 3), slice(None, None, 3)) # Arrow density per Garcia spec
 
-    # Note: Using r"" (Raw Strings) to prevent LaTeX escape sequence errors
-    plt.title(r"Exercise 8.7: Electric Field Vector Map ($\vec{E} = -\nabla \Phi$)")
-    plt.xlabel("Grid index (x)")
-    plt.ylabel("Grid index (y)")
+    # Metadata for the "McEwen Labs" Spec
+    print("McEwen Labs: Computing Dual-Mode Potential Gradient...")
+    print(f"Convergence achieved at {it} iterations.")
+
+    # --- PLOT A: PROPORTIONAL ARROWS (Intensity Map) ---
+    # Arrows scale with field strength (Longer at top, tiny at bottom)
+    im1 = ax1.imshow(phi, cmap='magma', origin='upper', extent=[0, N, N, 0])
+    ax1.quiver(X[skip], Y[skip], Ex[skip], Ey[skip], 
+               color='white', pivot='mid', scale=1.0)
+    ax1.set_title(r"A: Proportional Field Map ($|\vec{E}|$ scaling)")
+    ax1.set_xlabel("Grid index (x)"); ax1.set_ylabel("Grid index (y)")
+    fig.colorbar(im1, ax=ax1, label=r'Potential $\Phi$ [V]', fraction=0.046, pad=0.04)
+
+    # --- PLOT B: NORMALIZED ARROWS (Direction/Flow Map) ---
+    # Arrows are equal length to show direction in low-field zones
+    Ex_unit = np.where(magnitude > 0, Ex / magnitude, 0)
+    Ey_unit = np.where(magnitude > 0, Ey / magnitude, 0)
     
-    plt.tight_layout()
+    im2 = ax2.imshow(phi, cmap='magma', origin='upper', extent=[0, N, N, 0])
+    ax2.quiver(X[skip], Y[skip], Ex_unit[skip], Ey_unit[skip], 
+               color='white', pivot='mid', scale=25, width=0.004)
+    ax2.set_title(r"B: Normalized Direction Field ($\vec{E}/|\vec{E}|$)")
+    ax2.set_xlabel("Grid index (x)"); ax2.set_ylabel("Grid index (y)")
+    fig.colorbar(im2, ax=ax2, label=r'Potential $\Phi$ [V]', fraction=0.046, pad=0.04)
+
+    plt.suptitle(r"Problem 4 (8.7): Electric Field Vector Analysis ($\vec{E} = -\nabla \Phi$)", fontsize=16)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
 
 if __name__ == "__main__":
@@ -359,53 +376,69 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # ==============================================================================
-# MCEWEN LABS: PROJECT 6 - EXERCISE 5 (PROBLEM 8.10)
-# SCHEME: SUCCESSIVE OVER-RELAXATION (SOR)
-# ==============================================================================
-# Purpose: To demonstrate the massive efficiency gain of the SOR method 
-# over the Jacobi method using an optimal relaxation parameter omega.
+# MCEWEN LABS: PROJECT 6 - PROBLEM 8.10 (POISSON SOLVER)
+# SCHEME: SUCCESSIVE OVER-RELAXATION (SOR) - THE FINALE
 # ==============================================================================
 
 def main():
-    N = 50
+    # --- Physical & Numerical Parameters ---
+    N = 50                # Grid resolution
+    rho_val = 10.0        # Source term at center
+    tolerance = 1e-4      
+    omega = 2 / (1 + np.pi / N)  # Optimal relaxation parameter
+    
     phi = np.zeros((N, N))
-    phi[0, :] = 1.0  # Top plate at 1.0V
     
-    # --- SOR Specific Parameters ---
-    # Optimal omega for a square grid
-    omega = 2.0 / (1.0 + np.pi / N)
-    tolerance = 1e-4
-    max_iter = 10000
-    
-    print(f"McEwen Labs: Initiating SOR Solver (Omega = {omega:.4f})")
+    print(f"McEwen Labs: SOR Engine Active. Optimal Omega = {omega:.4f}")
 
-    for it in range(1, max_iter):
-        old_phi = np.copy(phi) # Just for checking error
+    # --- SOR Iterative Routine ---
+    for i_iter in range(1, 5001):
+        max_diff = 0
         
-        # SOR happens in-place. We don't use a 'new_phi' buffer.
-        for i in range(1, N-1):
-            for j in range(1, N-1):
-                # Standard average
-                phi_star = 0.25 * (phi[i+1,j] + phi[i-1,j] + 
-                                   phi[i,j+1] + phi[i,j-1])
+        for i in range(1, N - 1):
+            for j in range(1, N - 1):
+                # SOURCE CENTERING: Dead center at index 25
+                source = rho_val if (i == N//2 and j == N//2) else 0
                 
-                # Over-relaxation step
-                phi[i,j] = (1 - omega) * phi[i,j] + omega * phi_star
+                # Standard 4-neighbor average + Poisson source
+                phi_new = 0.25 * (phi[i+1,j] + phi[i-1,j] + 
+                                  phi[i,j+1] + phi[i,j-1] + source)
+                
+                # SOR weight adjustment
+                residual = phi_new - phi[i,j]
+                phi[i,j] += omega * residual
+                
+                if abs(residual) > max_diff:
+                    max_diff = abs(residual)
         
-        # Check convergence using Garcia's fractional change
-        mask = phi != 0
-        diff = np.sum(np.abs(1 - old_phi[mask] / phi[mask]))
-        fractional_change = diff / (N - 2)**2
-        
-        if fractional_change < tolerance:
-            print(f"SOR converged in {it} iterations.")
+        if max_diff < tolerance:
+            print(f"McEwen Labs Status: Convergence achieved at {i_iter} iterations.")
             break
 
-    # --- Visualization ---
-    plt.figure(figsize=(8, 6))
-    plt.imshow(phi, cmap='inferno')
-    plt.colorbar(label='Potential (V)')
-    plt.title(f"Problem 8.10: SOR Final Potential (N={N}, Iterations={it})")
+    # --- Clean Visualization ---
+    plt.figure(figsize=(10, 8), dpi=150) # Higher DPI for crispness
+    
+    # Heatmap with Bilinear Interpolation for a smooth, non-grainy gradient
+    im = plt.imshow(phi, cmap='magma', origin='upper', extent=[0, N, N, 0], 
+                    interpolation='bilinear')
+    
+    plt.colorbar(im, label=r'Potential $\Phi$ [V]', fraction=0.046, pad=0.04)
+    
+    # Add Equipotential Contours
+    plt.contour(phi, levels=15, colors='white', alpha=0.15, linewidths=0.5)
+    
+    # THE CRITICAL FIX: raw f-string (rf"") kills SyntaxWarnings for good
+    title_str = (rf"Problem 8.10: Poisson Potential (Shielded Line Charge)" + 
+                 rf"\nSOR Method | $\omega$: {omega:.2f} | Iterations: {i_iter}")
+    plt.title(title_str, fontsize=12)
+    
+    plt.xlabel("Grid index (x)")
+    plt.ylabel("Grid index (y)")
+    
+    # Subtle grid overlay
+    plt.grid(True, which='both', color='white', linestyle='-', linewidth=0.5, alpha=0.1)
+    
+    plt.tight_layout()
     plt.show()
 
 if __name__ == "__main__":
