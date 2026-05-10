@@ -1,0 +1,429 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 3 - EXERCISE 3.6 
+# SCHEME: LOG-LOG EXTRAPOLATION FOR HALLEY'S COMET TAU
+# ==============================================================================
+
+GM = 4 * np.pi**2
+
+def get_max_tau(v0, target_drift=0.01):
+    """
+    Finds the largest tau for a given v0 that keeps energy drift <= target_drift.
+    """
+    tau = 0.1  # Starting guess
+    while True:
+        # Run 1 orbit
+        n_steps = int(200 / tau) # Ensure we cover a full period
+        r = np.array([35.0, 0.0]); v = np.array([0.0, v0])
+        e_init = 0.5 * v0**2 - GM/35.0
+        
+        max_drift = 0
+        for _ in range(n_steps):
+            r_mag = np.linalg.norm(r)
+            accel = -GM * r / r_mag**3
+            v += tau * accel
+            r += tau * v
+            e_now = 0.5 * np.sum(v**2) - GM/np.linalg.norm(r)
+            max_drift = max(max_drift, abs((e_now - e_init)/e_init))
+            
+        if max_drift <= target_drift:
+            return tau
+        tau *= 0.8 # Shrink tau until we hit the conservation target
+
+# --- STEP 1: GATHER TRIAL DATA (1.0 TO 0.5 AU/yr) ---
+v_trials = np.array([1.0, 0.9, 0.8, 0.7, 0.6, 0.5])
+tau_results = [get_max_tau(v) for v in v_trials]
+
+# --- STEP 2: LOG-LOG EXTRAPOLATION FOR HALLEY (v0 = 0.198) ---
+coeffs = np.polyfit(np.log(v_trials), np.log(tau_results), 1)
+halley_v0 = 0.198
+halley_tau_est = np.exp(coeffs[1]) * (halley_v0**coeffs[0])
+
+# --- STEP 3: VISUALIZATION (THE REQUIRED LOG-LOG PLOT) ---
+plt.style.use('dark_background')
+plt.figure(figsize=(10, 6), dpi=120)
+
+plt.loglog(v_trials, tau_results, 'mo', markersize=10, label='Trial Data (Dr. Sahami Spec)')
+v_range = np.linspace(0.15, 1.1, 100)
+plt.loglog(v_range, np.exp(coeffs[1]) * (v_range**coeffs[0]), 'c--', alpha=0.6, label='Log-Log Fit')
+plt.loglog(halley_v0, halley_tau_est, 'ro', markersize=12, label=f'Halley Estimate: {halley_tau_est:.4f}')
+
+plt.title("3.6: Time-Step Extrapolation for Halley's Comet\nTarget: 1% Energy Conservation per Orbit", color='magenta')
+plt.xlabel("Initial Velocity $v_0$ (AU/yr)"); plt.ylabel("Largest $\\tau$ (Years)")
+plt.grid(True, which="both", ls="-", alpha=0.2)
+plt.legend()
+plt.show()
+
+print(f"--- MCEWEN LABS DATA TABLE ---")
+print(f"Velocity (v0) | Max Tau (1% Drift)")
+for v, t in zip(v_trials, tau_results):
+    print(f"{v:13.1f} | {t:18.5f}")
+print(f"EXTRAPOLATED TAU FOR HALLEY (v0=0.198): {halley_tau_est:.6f} years")
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 3 - EXERCISE 3.6 
+# SCHEME: EULER-CROMER STABILITY & ENERGY LANDSCAPE
+# ==============================================================================
+
+# Solar System Constant
+GM = 4 * np.pi**2
+
+def run_halley_final(v0, tau, total_years=160):
+    """
+    Final implementation using the extrapolated tau for 1% conservation.
+    Simulates 160 years to capture exactly two perihelion passages.
+    """
+    n_steps = int(total_years / tau)
+    t_axis = np.linspace(0, total_years, n_steps)
+    
+    # Pre-allocating data arrays
+    r_pos = np.zeros((n_steps, 2))
+    ke_hist, pe_hist, total_e_hist = np.zeros(n_steps), np.zeros(n_steps), np.zeros(n_steps)
+    
+    # INITIAL STATE: Halley at Aphelion (35 AU)
+    r = np.array([35.0, 0.0])
+    v = np.array([0.0, v0])
+
+    for i in range(n_steps):
+        r_mag = np.linalg.norm(r)
+        
+        # 1. Physics Snapshot
+        ke = 0.5 * np.sum(v**2)
+        pe = -GM / r_mag
+        
+        ke_hist[i] = ke
+        pe_hist[i] = pe
+        total_e_hist[i] = ke + pe
+        r_pos[i] = r
+        
+        # 2. EULER-CROMER UPDATE (Velocity First)
+        accel = -GM * r / r_mag**3
+        v = v + tau * accel
+        r = r + tau * v
+        
+    return t_axis, ke_hist, pe_hist, total_e_hist, r_pos
+
+# --- EXECUTION: USING EXTRAPOLATED TAU ---
+# v0 = 0.198 (Halley), tau = 0.000442 (From 1.0-0.5 AU/yr Trial Data)
+halley_v0 = 0.198
+halley_tau = 0.000442 
+t, ke, pe, total, pos = run_halley_final(halley_v0, halley_tau)
+
+# --- VISUALIZATION: THE GARCIA & SAHAMI SPEC ---
+plt.style.use('dark_background')
+fig = plt.figure(figsize=(15, 7), dpi=150)
+
+# 1. THE ORBIT GRAPH (Polar Trajectory)
+ax1 = fig.add_subplot(1, 2, 1, projection='polar')
+theta = np.arctan2(pos[:,1], pos[:,0])
+r_mags = np.sqrt(pos[:,0]**2 + pos[:,1]**2)
+ax1.plot(theta, r_mags, color='cyan', linewidth=1, label='Halley Orbit')
+ax1.plot(0, 0, 'yo', markersize=12, label='Sun')
+ax1.set_title("3.6: Polar Orbital Geometry", color='magenta', pad=20)
+ax1.legend()
+
+# 2. THE ENERGY GRAPH (Kinetic, Potential, and Total)
+ax2 = fig.add_subplot(1, 2, 2)
+ax2.plot(t, ke, color='lime', linestyle='-.', label='Kinetic (K)')
+ax2.plot(t, pe, color='red', linestyle='--', label='Potential (U)')
+ax2.plot(t, total, color='white', linewidth=2, label='Total (E)')
+ax2.set_title("3.6: Mechanical Energy Landscape (160 Years)", color='magenta')
+ax2.set_xlabel("Time (Years)")
+ax2.set_ylabel("Specific Energy ($AU^2/yr^2$)")
+ax2.grid(True, alpha=0.1)
+ax2.legend(loc='center right')
+
+plt.tight_layout()
+plt.show()
+
+# Final Verification
+drift = abs((total[-1] - total[0]) / total[0]) * 100
+print(f"--- MCEWEN LABS FINAL VERIFICATION ---")
+print(f"Simulation Duration: 160 Years (2 Orbits)")
+print(f"Time Step (Tau): {halley_tau} Years")
+print(f"Total Energy Drift: {drift:.6f}% (Target: <1%)")
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 3 - EXERCISE 3.11 (EXACT ALIGNMENT)
+# SCHEME: RK4 VS. EULER-CROMER ENERGY COMPONENTS
+# ==============================================================================
+
+GM = 4 * np.pi**2
+
+def get_derivs(state):
+    x, y, vx, vy = state
+    r_mag = np.sqrt(x**2 + y**2)
+    return np.array([vx, vy, -GM*x/r_mag**3, -GM*y/r_mag**3])
+
+def run_orbit(method, tau=0.015, total_years=160):
+    n_steps = int(total_years / tau)
+    state = np.array([35.0, 0.0, 0.0, 0.198]) # Halley Aphelion
+    
+    ke_hist, pe_hist, total_e_hist = [], [], []
+    r_hist = []
+    
+    for i in range(n_steps):
+        r_mag = np.linalg.norm(state[:2])
+        v_sq = np.sum(state[2:]**2)
+        
+        ke = 0.5 * v_sq
+        pe = -GM / r_mag
+        
+        r_hist.append(state[:2].copy())
+        ke_hist.append(ke)
+        pe_hist.append(pe)
+        total_e_hist.append(ke + pe)
+        
+        if method == 'RK4':
+            k1 = tau * get_derivs(state)
+            k2 = tau * get_derivs(state + 0.5*k1)
+            k3 = tau * get_derivs(state + 0.5*k2)
+            k4 = tau * get_derivs(state + k3)
+            state = state + (k1 + 2*k2 + 2*k3 + k4)/6.0
+        else:
+            accel = -GM * state[:2] / r_mag**3
+            state[2:] += tau * accel
+            state[:2] += tau * state[2:]
+            
+    return np.array(r_hist), np.array(ke_hist), np.array(pe_hist), np.array(total_e_hist)
+
+# --- EXECUTION ---
+tau_fair = 0.015
+r_rk, ke_rk, pe_rk, e_rk = run_orbit('RK4', tau_fair)
+r_ec, ke_ec, pe_ec, e_ec = run_orbit('EC', tau_fair)
+t_axis = np.linspace(0, 160, len(e_rk))
+
+# --- VISUALIZATION: THE GARCIA COMPARISON ---
+plt.style.use('dark_background')
+fig = plt.figure(figsize=(16, 10), dpi=150)
+
+# Top Row: Orbital Trajectories
+ax1 = fig.add_subplot(2, 2, 1, projection='polar')
+ax1.plot(np.arctan2(r_rk[:,1], r_rk[:,0]), np.sqrt(r_rk[:,0]**2 + r_rk[:,1]**2), color='magenta', label='RK4')
+ax1.set_title("RK4: Orbital Trajectory", color='magenta', pad=15)
+
+ax2 = fig.add_subplot(2, 2, 2, projection='polar')
+ax2.plot(np.arctan2(r_ec[:,1], r_ec[:,0]), np.sqrt(r_ec[:,0]**2 + r_ec[:,1]**2), color='cyan', label='EC')
+ax2.set_title("Euler-Cromer: Orbital Trajectory", color='cyan', pad=15)
+
+# Bottom Row: Energy Landscapes (K, U, E)
+ax3 = fig.add_subplot(2, 2, 3)
+ax3.plot(t_axis, ke_rk, 'g-.', label='Kinetic (K)')
+ax3.plot(t_axis, pe_rk, 'r--', label='Potential (U)')
+ax3.plot(t_axis, e_rk, 'w-', linewidth=2, label='Total (E)')
+ax3.set_title("RK4: Mechanical Energy Exchange", color='magenta')
+ax3.legend(loc='lower right', fontsize=8)
+
+ax4 = fig.add_subplot(2, 2, 4)
+ax4.plot(t_axis, ke_ec, 'g-.', label='Kinetic (K)')
+ax4.plot(t_axis, pe_ec, 'r--', label='Potential (U)')
+ax4.plot(t_axis, e_ec, 'w-', linewidth=2, label='Total (E)')
+ax4.set_title("Euler-Cromer: Mechanical Energy Exchange", color='cyan')
+ax4.legend(loc='lower right', fontsize=8)
+
+plt.tight_layout()
+plt.show()
+
+print(f"RK4 Drift: {abs((e_rk[-1]-e_rk[0])/e_rk[0])*100:.6f}%")
+print(f"EC Drift: {abs((e_ec[-1]-e_ec[0])/e_ec[0])*100:.6f}%")
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 3 - EXERCISE 3.14 (GARCIA ALIGNMENT)
+# SCHEME: ADAPTIVE RK4 - HIGH-ECCENTRICITY FLOWER PRECESSION
+# ==============================================================================
+# Purpose: Demonstrate orbital precession in a non-Newtonian gravity well.
+# Specs: Polar Projection; K, U, and Constant Total E Landscape.
+# ==============================================================================
+
+GM = 4 * np.pi**2
+ALPHA = 0.01  # Precession constant
+
+def get_accel(r_vec):
+    """The Modified Force Law Kernel: F = -(GMm/r^3) * (1 - alpha/r) * r"""
+    r_mag = np.linalg.norm(r_vec)
+    return -GM * (1 - ALPHA/r_mag) / r_mag**3 * r_vec
+
+def adaptive_rk4_step(r, v, tau, tol=1e-9):
+    """Adaptive Brain: Richardson Extrapolation for stiff solar encounters."""
+    def rk4_jump(curr_r, curr_v, h):
+        def derivs(cr, cv): return cv, get_accel(cr)
+        k1r, k1v = derivs(curr_r, curr_v)
+        k2r, k2v = derivs(curr_r + 0.5*h*k1r, curr_v + 0.5*h*k1v)
+        k3r, k3v = derivs(curr_r + 0.5*h*k2r, curr_v + 0.5*h*k2v)
+        k4r, k4v = derivs(curr_r + h*k3r, curr_v + h*k3v)
+        return curr_r + (h/6.0)*(k1r + 2*k2r + 2*k3r + k4r), \
+               curr_v + (h/6.0)*(k1v + 2*k2v + 2*k3v + k4v)
+
+    r_big, v_big = rk4_jump(r, v, tau)
+    r_mid, v_mid = rk4_jump(r, v, tau/2.0)
+    r_small, v_small = rk4_jump(r_mid, v_mid, tau/2.0)
+    
+    error = np.linalg.norm(r_big - r_small)
+    if error < tol:
+        t_next = tau * (tol/error)**0.2 if error > 0 else tau * 2.0
+        return r_small, v_small, t_next, True
+    return r, v, tau * (tol/error)**0.2, False
+
+# --- EXPERIMENTAL SETUP: TIGHT RADIUS FOR FLOWER EFFECT ---
+# Using v = 2.0 AU/yr to force a deep perihelion dive into the sun.
+r_state, v_state = np.array([1.0, 0.0]), np.array([0.0, 2.0])
+tau, t, t_max = 0.001, 0, 4.0 
+
+h_r, h_theta, h_ke, h_pe, h_tot, h_t = [], [], [], [], [], []
+
+while t < t_max:
+    r_mag = np.linalg.norm(r_state)
+    ke = 0.5 * np.linalg.norm(v_state)**2
+    pe = -GM / r_mag * (1 - ALPHA/(2*r_mag)) # Effective potential
+    
+    h_r.append(r_mag); h_theta.append(np.arctan2(r_state[1], r_state[0]))
+    h_ke.append(ke); h_pe.append(pe); h_tot.append(ke + pe); h_t.append(t)
+    
+    r_state, v_state, tau, accepted = adaptive_rk4_step(r_state, v_state, tau)
+    if accepted: t += tau
+
+# --- VISUALIZATION: THE EXACT GARCIA SPEC ---
+plt.style.use('dark_background')
+fig = plt.figure(figsize=(16, 8), dpi=120)
+
+# PLOT 1: POLAR FLOWER GEOMETRY
+ax1 = fig.add_subplot(1, 2, 1, projection='polar')
+ax1.plot(h_theta, h_r, color='cyan', linewidth=0.8, label='Precessing Path')
+ax1.plot(0, 0, 'yo', markersize=15, label='Sun')
+ax1.set_title("3.14: Polar Flower Orbit Precession", color='magenta', pad=20)
+ax1.legend(loc='upper right')
+
+# PLOT 2: ENERGY LANDSCAPE (The Constant E Proof)
+ax2 = fig.add_subplot(1, 2, 2)
+ax2.plot(h_t, h_ke, 'g-.', label='Kinetic (K)')
+ax2.plot(h_t, h_pe, 'r--', label='Potential (U)')
+ax2.plot(h_t, h_tot, 'w-', linewidth=2, label='Total Energy (E)')
+ax2.set_title("3.14: Mechanical Energy Landscape", color='magenta')
+ax2.set_xlabel("Time (Years)"); ax2.set_ylabel("Specific Energy")
+ax2.legend(loc='center right'); ax2.grid(alpha=0.1)
+
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# MCEWEN LABS: PROJECT 3 - EXERCISE 3.15 
+# SCHEME: ADAPTIVE RK4 - ENERGY DECAY ANALYSIS
+# ==============================================================================
+
+GM = 4 * np.pi**2
+
+def get_accel(r_vec, v_vec, C_drag):
+    r_mag = np.linalg.norm(r_vec)
+    v_mag = np.linalg.norm(v_vec)
+    # Newtonian Gravity + Velocity-Squared Drag
+    return -GM * r_vec / r_mag**3 - C_drag * v_mag * v_vec
+
+def adaptive_rk4_step(r, v, tau, C_drag, tol=1e-8):
+    def rk4_jump(curr_r, curr_v, h):
+        def derivs(cr, cv): return cv, get_accel(cr, cv, C_drag)
+        k1r, k1v = derivs(curr_r, curr_v)
+        k2r, k2v = derivs(curr_r + 0.5*h*k1r, curr_v + 0.5*h*k1v)
+        k3r, k3v = derivs(curr_r + 0.5*h*k2r, curr_v + 0.5*h*k2v)
+        k4r, k4v = derivs(curr_r + h*k3r, curr_v + h*k3v)
+        return curr_r + (h/6.0)*(k1r + 2*k2r + 2*k3r + k4r), \
+               curr_v + (h/6.0)*(k1v + 2*k2v + 2*k3v + k4v)
+
+    r_big, v_big = rk4_jump(r, v, tau)
+    r_mid, v_mid = rk4_jump(r, v, tau/2.0)
+    r_small, v_small = rk4_jump(r_mid, v_mid, tau/2.0)
+    
+    error = np.linalg.norm(r_big - r_small)
+    if error < tol:
+        t_next = tau * (tol/error)**0.2 if error > 0 else tau * 2.0
+        return r_small, v_small, t_next, True
+    return r, v, tau * (tol/error)**0.2, False
+
+# --- SETUP: DRAG MAGNITUDE PER GARCIA SPEC ---
+r_state = np.array([1.0, 0.0])
+v_state = np.array([0.0, 4.0])
+C_VAL = (GM / 1.0**2) / (100 * 4.0**2) # |Fg| = 100 * |Fd|
+
+tau, t, t_max = 0.01, 0, 10.0
+h_x, h_y, h_ke, h_pe, h_tot, h_t = [], [], [], [], [], []
+
+while t < t_max:
+    r_mag = np.linalg.norm(r_state)
+    ke = 0.5 * np.linalg.norm(v_state)**2
+    pe = -GM / r_mag
+    
+    h_x.append(r_state[0]); h_y.append(r_state[1])
+    h_ke.append(ke); h_pe.append(pe); h_tot.append(ke + pe); h_t.append(t)
+    
+    r_state, v_state, tau, accepted = adaptive_rk4_step(r_state, v_state, tau, C_VAL)
+    if accepted: t += tau
+    if r_mag < 0.02: break # Solar Impact
+
+# --- VISUALIZATION: THE SPIRAL AND ENERGY LOSS ---
+plt.style.use('dark_background')
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8), dpi=120)
+
+# PLOT 1: THE SPIRAL (XY)
+ax1.plot(h_x, h_y, color='orange', linewidth=0.8, label='Decaying Orbit')
+ax1.plot(0, 0, 'yo', markersize=15, label='Sun')
+ax1.set_aspect('equal')
+ax1.set_title("3.15: The Orbital Spiral of Death", color='orange')
+ax1.legend()
+
+# PLOT 2: THE ENERGY LANDSCAPE (K, U, and Decaying Total E)
+ax2.plot(h_t, h_ke, color='lime', linestyle='-.', alpha=0.7, label='Kinetic (K)')
+ax2.plot(h_t, h_pe, color='red', linestyle='--', alpha=0.7, label='Potential (U)')
+ax2.plot(h_t, h_tot, color='white', linewidth=2.5, label='Total Energy (E)')
+ax2.set_title("3.15: Non-Conservative Energy Decay", color='orange')
+ax2.set_xlabel("Time (Years)")
+ax2.set_ylabel("Specific Energy")
+ax2.legend(loc='lower left')
+ax2.grid(alpha=0.1)
+
+plt.tight_layout()
+plt.show()
