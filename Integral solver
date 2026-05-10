@@ -1,0 +1,34 @@
+import numpy as np
+from scipy.integrate import quad
+
+# --- DIMENSIONLESS CALCULATOR SETTINGS ---
+# target_val = 2.315 (The target value for N at Tc)
+# t = T/Tc (Dimensionless temperature)
+# c = mu/kTc (Dimensionless chemical potential)
+
+def solve_bose_integral(t, c):
+    """
+    Solves the integral for a specific temperature and chemical potential.
+    """
+    integrand = lambda x: np.sqrt(x) / (np.exp((x - c) / t) - 1)
+    
+    # We integrate from 0 to infinity. 
+    # 'quad' handles the singularity at x=0 if c is almost 0.
+    result, error = quad(integrand, 0, np.inf)
+    
+    print(f"--- Numerical Lab Results ---")
+    print(f"Input t (T/Tc): {t}")
+    print(f"Input c (mu/kTc): {c}")
+    print(f"Calculated Integral Value: {result:.6f}")
+    print(f"Estimated Numerical Error: {error:.2e}")
+    
+    return result
+
+# --- TEST CASE: Verification of Part (b) ---
+# t = 2 (Two times the condensation temperature)
+# c = -0.8 (Book's approximation)
+solve_bose_integral(t=2, c=-0.8)
+
+# --- TEST CASE: Verification of Tc Benchmark ---
+# t = 1, c = 0 should yield ~2.315
+# solve_bose_integral(t=1, c=-1e-10) # use a tiny c to avoid division by zero
